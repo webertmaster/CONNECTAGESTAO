@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -21,12 +20,6 @@
             50:'#eef4ff',100:'#dbe6ff',200:'#bfd2ff',300:'#93b4ff',
             400:'#6690ff',500:'#3f6bff',600:'#2a4de0',700:'#243db3',
             800:'#22368c',900:'#203270'
-          },
-          edu: {
-            mint:'#7dd3c0',
-            peach:'#ffb199',
-            lavender:'#c4b5fd',
-            sun:'#fcd34d'
           }
         },
         fontFamily: { sans: ['Inter','system-ui','sans-serif'] }
@@ -57,14 +50,12 @@
   input:focus,select:focus,textarea:focus{border-color:#3f6bff;box-shadow:0 0 0 3px rgba(63,107,255,.15)}
   .badge{padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600}
   .checkbox-custom{width:20px;height:20px;accent-color:#3f6bff}
+  .tab-btn.active{background:#3f6bff;color:#fff}
 </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors">
 
-<!-- ============ LAYOUT ============ -->
 <div class="flex min-h-screen">
-
-  <!-- SIDEBAR -->
   <aside id="sidebar" class="fixed lg:static z-40 w-64 h-screen bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col transition-transform -translate-x-full lg:translate-x-0">
     <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
       <div class="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white">
@@ -82,11 +73,14 @@
       <a data-page="alunos" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="users" class="w-5 h-5"></i><span>Alunos</span>
       </a>
-      <a data-page="pagamentos" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
-        <i data-lucide="credit-card" class="w-5 h-5"></i><span>Pagamentos</span>
-      </a>
       <a data-page="turmas" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="book-open" class="w-5 h-5"></i><span>Turmas</span>
+      </a>
+      <a data-page="notas" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
+        <i data-lucide="clipboard-list" class="w-5 h-5"></i><span>Notas</span>
+      </a>
+      <a data-page="pagamentos" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
+        <i data-lucide="credit-card" class="w-5 h-5"></i><span>Pagamentos</span>
       </a>
       <a data-page="comunicados" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="message-circle" class="w-5 h-5"></i><span>Comunicados</span>
@@ -112,9 +106,7 @@
     </div>
   </aside>
 
-  <!-- MAIN -->
   <main class="flex-1 min-w-0">
-    <!-- TOPBAR -->
     <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur border-b border-slate-200 dark:border-slate-700 px-4 lg:px-8 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <button id="btnMenu" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
@@ -123,25 +115,18 @@
         <h2 id="pageTitle" class="text-lg lg:text-xl font-bold">Dashboard</h2>
       </div>
       <div class="flex items-center gap-2">
-        <button id="btnNotif" class="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
-          <i data-lucide="bell" class="w-5 h-5"></i>
-          <span id="notifBadge" class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
         <button id="btnDark" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="Alternar tema">
           <i data-lucide="moon" class="w-5 h-5 dark:hidden"></i>
           <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
         </button>
       </div>
     </header>
-
-    <!-- CONTENT -->
     <section id="content" class="p-4 lg:p-8 fade-in"></section>
   </main>
 </div>
 
-<!-- ============ MODAL GENÉRICO ============ -->
 <div id="modal" class="hidden fixed inset-0 z-50 modal-backdrop bg-black/50 flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+  <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
       <h3 id="modalTitle" class="text-lg font-bold"></h3>
       <button onclick="closeModal()" class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
@@ -150,14 +135,10 @@
   </div>
 </div>
 
-<!-- ============ TOAST ============ -->
 <div id="toast" class="hidden fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3"></div>
 
-<!-- ============ SCRIPT ============ -->
 <script>
-/* =========================================================
-   CAMADA DE DADOS (simula Firestore — troque por Firebase)
-   ========================================================= */
+/* ============ DB ============ */
 const DB = {
   _get(k){ return JSON.parse(localStorage.getItem('edu_'+k) || '[]'); },
   _set(k,v){ localStorage.setItem('edu_'+k, JSON.stringify(v)); },
@@ -165,31 +146,42 @@ const DB = {
   turmas:     { all:()=>DB._get('turmas'),     save:(a)=>DB._set('turmas',a) },
   pagamentos:  { all:()=>DB._get('pagamentos'), save:(a)=>DB._set('pagamentos',a) },
   comunicados:{ all:()=>DB._get('comunicados'),save:(a)=>DB._set('comunicados',a) },
+  notas:      { all:()=>DB._get('notas'),      save:(a)=>DB._set('notas',a) },
   config:     { get:()=>JSON.parse(localStorage.getItem('edu_config')||'{}'),
                 set:(c)=>localStorage.setItem('edu_config',JSON.stringify(c)) }
 };
 
-/* Seed inicial (primeira execução) */
 (function seed(){
   if(!localStorage.getItem('edu_seeded')){
     DB.turmas.save([
-      {id:id(),nome:'Matemática 6º ano',professor:'Ana Souza',horario:'Seg/Qua 14h',maxAlunos:10},
-      {id:id(),nome:'Português 7º ano',professor:'Carlos Lima',horario:'Ter/Qui 15h',maxAlunos:8},
-      {id:id(),nome:'Ciências 8º ano',professor:'Julia Ramos',horario:'Sex 16h',maxAlunos:12}
+      {id:id(),nome:'Matemática 6º ano',professor:'Ana Souza',horario:'Seg/Qua 14h',maxAlunos:10,disciplinas:['Matemática']},
+      {id:id(),nome:'Português 7º ano',professor:'Carlos Lima',horario:'Ter/Qui 15h',maxAlunos:8,disciplinas:['Português']},
+      {id:id(),nome:'Ciências 8º ano',professor:'Julia Ramos',horario:'Sex 16h',maxAlunos:12,disciplinas:['Ciências']}
     ]);
     const hoje = new Date();
-    const venc1 = new Date(hoje); venc1.setDate(hoje.getDate()+2);
-    const venc2 = new Date(hoje); venc2.setDate(hoje.getDate()+10);
-    const venc3 = new Date(hoje); venc3.setDate(hoje.getDate()-3);
     DB.alunos.save([
       {id:id(),nome:'Maria Silva',nascimento:'2012-05-14',turmaId:DB.turmas.all()[0].id,horario:'Seg/Qua 14h',responsavel:'Joana Silva',telefone:'5511988887777',valor:250,status:'ativo',dataCadastro:hoje.toISOString(),vencimentoDia:10},
-      {id:id(),nome:'Pedro Santos',nascimento:'2011-08-22',turmaId:DB.turmas.all()[0].id,horario:'Seg/Qua 14h',responsavel:'Rita Santos',telefone:'5511977776666',valor:280,status:'ativo',dataCadastro:hoje.toISOString(),vencimentoDia:venc1.getDate()},
-      {id:id(),nome:'Lucas Oliveira',nascimento:'2010-03-10',turmaId:DB.turmas.all()[1].id,horario:'Ter/Qui 15h',responsavel:'Paulo Oliveira',telefone:'5511966665555',valor:300,status:'ativo',dataCadastro:hoje.toISOString(),vencimentoDia:venc2.getDate()},
+      {id:id(),nome:'Pedro Santos',nascimento:'2011-08-22',turmaId:DB.turmas.all()[0].id,horario:'Seg/Qua 14h',responsavel:'Rita Santos',telefone:'5511977776666',valor:280,status:'ativo',dataCadastro:hoje.toISOString(),vencimentoDia:15},
+      {id:id(),nome:'Lucas Oliveira',nascimento:'2010-03-10',turmaId:DB.turmas.all()[1].id,horario:'Ter/Qui 15h',responsavel:'Paulo Oliveira',telefone:'5511966665555',valor:300,status:'ativo',dataCadastro:hoje.toISOString(),vencimentoDia:20},
       {id:id(),nome:'Ana Costa',nascimento:'2013-11-30',turmaId:DB.turmas.all()[2].id,horario:'Sex 16h',responsavel:'Márcia Costa',telefone:'5511955554444',valor:220,status:'inativo',dataCadastro:hoje.toISOString(),vencimentoDia:5}
     ]);
+    // Seed de notas de exemplo
+    const alunos = DB.alunos.all();
+    const turmas = DB.turmas.all();
+    const notasSeed = [];
+    alunos.forEach(a=>{
+      const t = turmas.find(x=>x.id===a.turmaId);
+      if(!t) return;
+      const disc = t.disciplinas[0];
+      [1,2,3].forEach(tri=>{
+        notasSeed.push({id:id(),alunoId:a.id,disciplina:disc,tipo:'Prova',nota:7+Math.random()*3,notaMax:10,trimestre:tri,data:new Date(2024,tri*3,15).toISOString()});
+        notasSeed.push({id:id(),alunoId:a.id,disciplina:disc,tipo:'Trabalho',nota:6+Math.random()*4,notaMax:10,trimestre:tri,data:new Date(2024,tri*3,20).toISOString()});
+      });
+    });
+    DB.notas.save(notasSeed);
     DB.pagamentos.save([
-      {id:id(),alunoId:DB.alunos.all()[0].id,valor:250,metodo:'PIX',data:new Date(hoje.getFullYear(),hoje.getMonth(),5).toISOString(),referente:'Mensal'},
-      {id:id(),alunoId:DB.alunos.all()[2].id,valor:300,metodo:'Cartão',data:new Date(hoje.getFullYear(),hoje.getMonth(),3).toISOString(),referente:'Mensal'}
+      {id:id(),alunoId:alunos[0].id,valor:250,metodo:'PIX',data:new Date(hoje.getFullYear(),hoje.getMonth(),5).toISOString(),referente:'Mensal'},
+      {id:id(),alunoId:alunos[2].id,valor:300,metodo:'Cartão',data:new Date(hoje.getFullYear(),hoje.getMonth(),3).toISOString(),referente:'Mensal'}
     ]);
     localStorage.setItem('edu_seeded','1');
   }
@@ -197,28 +189,20 @@ const DB = {
 
 function id(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function fmtBRL(v){ return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
-function fmtDate(d){ if(!d) return '—'; const x=new Date(d); return x.toLocaleDateString('pt-BR'); }
-function fmtDateTime(d){ if(!d) return '—'; const x=new Date(d); return x.toLocaleString('pt-BR'); }
+function fmtDate(d){ if(!d) return '—'; return new Date(d).toLocaleDateString('pt-BR'); }
+function fmtDateTime(d){ if(!d) return '—'; return new Date(d).toLocaleString('pt-BR'); }
 
-/* =========================================================
-   NAVEGAÇÃO
-   ========================================================= */
+/* ============ NAV ============ */
 const pages = {
-  dashboard:   renderDashboard,
-  alunos:      renderAlunos,
-  pagamentos:   renderPagamentos,
-  turmas:      renderTurmas,
-  comunicados: renderComunicados,
-  financeiro:  renderFinanceiro,
-  automacao:   renderAutomacao,
-  relatorios:  renderRelatorios
+  dashboard:renderDashboard, alunos:renderAlunos, pagamentos:renderPagamentos,
+  turmas:renderTurmas, comunicados:renderComunicados, financeiro:renderFinanceiro,
+  automacao:renderAutomacao, relatorios:renderRelatorios, notas:renderNotas
 };
 const titles = {
   dashboard:'Dashboard',alunos:'Alunos',pagamentos:'Pagamentos',
   turmas:'Turmas',comunicados:'Comunicados',financeiro:'Financeiro',
-  automacao:'Automação WhatsApp',relatorios:'Relatórios'
+  automacao:'Automação WhatsApp',relatorios:'Relatórios',notas:'Notas e Desempenho'
 };
-
 function go(page){
   document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.toggle('active',l.dataset.page===page));
   document.getElementById('pageTitle').textContent = titles[page];
@@ -231,7 +215,6 @@ function go(page){
 document.querySelectorAll('.sidebar-link').forEach(l=>l.addEventListener('click',()=>go(l.dataset.page)));
 document.getElementById('btnMenu').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('-translate-x-full'));
 
-/* Dark mode */
 const btnDark = document.getElementById('btnDark');
 if(localStorage.getItem('edu_dark')==='1') document.documentElement.classList.add('dark');
 btnDark.addEventListener('click',()=>{
@@ -240,9 +223,6 @@ btnDark.addEventListener('click',()=>{
   lucide.createIcons();
 });
 
-/* =========================================================
-   MODAL / TOAST
-   ========================================================= */
 function openModal(title, html){
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = html;
@@ -259,10 +239,29 @@ function toast(msg, type='success'){
   setTimeout(()=>t.classList.add('hidden'),3000);
 }
 
-/* =========================================================
-   DASHBOARD
-   ========================================================= */
-let chart1, chart2;
+/* ============ HELPERS DE NOTAS ============ */
+function calcularMedias(alunoId){
+  const notas = DB.notas.all().filter(n=>n.alunoId===alunoId);
+  const porDisc = {};
+  notas.forEach(n=>{
+    if(!porDisc[n.disciplina]) porDisc[n.disciplina] = {1:[],2:[],3:[]};
+    if(porDisc[n.disciplina][n.trimestre]) porDisc[n.disciplina][n.trimestre].push(n.nota);
+  });
+  const res = {};
+  Object.keys(porDisc).forEach(d=>{
+    res[d] = {};
+    [1,2,3].forEach(tri=>{
+      const arr = porDisc[d][tri]||[];
+      res[d][tri] = arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+    });
+    const todas = Object.values(res[d]);
+    res[d].media = todas.reduce((a,b)=>a+b,0)/todas.length;
+  });
+  return res;
+}
+
+/* ============ DASHBOARD ============ */
+let chart1;
 function renderDashboard(){
   const alunos = DB.alunos.all();
   const pag = DB.pagamentos.all();
@@ -280,6 +279,10 @@ function renderDashboard(){
     const d = new Date(p.data); return d.getMonth()===mesAtual && d.getFullYear()===anoAtual;
   }).reduce((s,p)=>s+(+p.valor||0),0);
 
+  // Média geral de desempenho
+  const todasNotas = DB.notas.all();
+  const mediaGeral = todasNotas.length ? todasNotas.reduce((s,n)=>s+n.nota,0)/todasNotas.length : 0;
+
   const html = `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       ${statCard('Total de Alunos', alunos.length, 'users', 'gradient-brand', 'text-white')}
@@ -287,54 +290,18 @@ function renderDashboard(){
       ${statCard('Inativos', inativos.length, 'user-x', 'gradient-peach', 'text-white')}
       ${statCard('Venc. próximos', vencProx.length, 'clock', 'gradient-sun', 'text-white')}
     </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      ${statCard('Média Geral', mediaGeral.toFixed(1), 'target', 'gradient-lav', 'text-white')}
+      ${statCard('Previsto', fmtBRL(previsto), 'trending-up', 'gradient-brand', 'text-white')}
+      ${statCard('Recebido', fmtBRL(recebido), 'check-circle', 'gradient-mint', 'text-white')}
+      ${statCard('A receber', fmtBRL(Math.max(0,previsto-recebido)), 'alert-circle', 'gradient-peach', 'text-white')}
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold">Pagamentos dos últimos 6 meses</h3>
-          <span class="text-xs text-slate-500">Receita mensal</span>
         </div>
         <canvas id="chart1" height="110"></canvas>
-      </div>
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">Resumo do mês</h3>
-        <div class="space-y-4">
-          <div>
-            <p class="text-xs text-slate-500">Previsto</p>
-            <p class="text-2xl font-bold text-brand-600 dark:text-brand-400">${fmtBRL(previsto)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-slate-500">Recebido</p>
-            <p class="text-2xl font-bold text-emerald-600">${fmtBRL(recebido)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-slate-500">A receber</p>
-            <p class="text-2xl font-bold text-orange-600">${fmtBRL(Math.max(0,previsto-recebido))}</p>
-          </div>
-          <div class="pt-3 border-t border-slate-200 dark:border-slate-700">
-            <div class="flex justify-between text-sm mb-1"><span>Progresso</span><span>${previsto?Math.round(recebido/previsto*100):0}%</span></div>
-            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2"><div class="h-2 rounded-full gradient-brand" style="width:${previsto?Math.min(100,recebido/previsto*100):0}%"></div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">Últimos pagamentos</h3>
-        <div class="space-y-3">
-          ${pag.slice().sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(p=>{
-            const a = alunos.find(x=>x.id===p.alunoId);
-            return `<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
-              <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full gradient-mint flex items-center justify-center text-white"><i data-lucide="check" class="w-4 h-4"></i></div>
-                <div>
-                  <p class="font-semibold text-sm">${a?a.nome:'—'}</p>
-                  <p class="text-xs text-slate-500">${fmtDateTime(p.data)} • ${p.metodo}</p>
-                </div>
-              </div>
-              <span class="font-bold text-emerald-600">${fmtBRL(p.valor)}</span>
-            </div>`;
-          }).join('') || '<p class="text-sm text-slate-500">Nenhum pagamento registrado.</p>'}
-        </div>
       </div>
       <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-4">⚠️ Vencimentos próximos</h3>
@@ -352,7 +319,6 @@ function renderDashboard(){
   `;
   document.getElementById('content').innerHTML = html;
 
-  // Gráfico
   const ctx = document.getElementById('chart1').getContext('2d');
   if(chart1) chart1.destroy();
   const labels=[], data=[];
@@ -375,13 +341,10 @@ function statCard(label,val,icon,grad,text){
   </div>`;
 }
 
-/* =========================================================
-   ALUNOS
-   ========================================================= */
+/* ============ ALUNOS ============ */
 function renderAlunos(){
   const alunos = DB.alunos.all();
-  const turmas = DB.turmas.all();
-  const html = `
+  document.getElementById('content').innerHTML = `
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
       <div class="flex-1 flex items-center gap-2">
         <div class="relative flex-1 max-w-md">
@@ -398,7 +361,6 @@ function renderAlunos(){
     </div>
     <div id="listaAlunos" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
   `;
-  document.getElementById('content').innerHTML = html;
   drawAlunos();
   document.getElementById('buscaAluno').addEventListener('input',drawAlunos);
   document.getElementById('filtroStatus').addEventListener('change',drawAlunos);
@@ -414,6 +376,8 @@ function drawAlunos(){
   el.innerHTML = lista.map(a=>{
     const t = DB.turmas.all().find(x=>x.id===a.turmaId);
     const statusColor = a.status==='ativo'?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+    const medias = calcularMedias(a.id);
+    const mediaGeral = Object.values(medias).length ? Object.values(medias).reduce((s,m)=>s+m.media,0)/Object.values(medias).length : 0;
     return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex items-start justify-between mb-3">
         <div class="flex items-center gap-3">
@@ -430,6 +394,12 @@ function drawAlunos(){
         <p><i data-lucide="phone" class="w-3.5 h-3.5 inline mr-1 text-slate-400"></i> ${a.telefone}</p>
         <p><i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1 text-slate-400"></i> Venc. dia ${a.vencimentoDia||10} • ${fmtBRL(a.valor)}</p>
       </div>
+      <div class="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-slate-500">Média geral</span>
+          <span class="font-bold ${mediaGeral>=6?'text-emerald-600':'text-red-600'}">${mediaGeral?mediaGeral.toFixed(1):'—'}</span>
+        </div>
+      </div>
       <div class="flex gap-2 mt-4">
         <button onclick="verAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-semibold">Ver</button>
         <button onclick="formAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 hover:bg-brand-200 text-sm font-semibold">Editar</button>
@@ -442,7 +412,6 @@ function drawAlunos(){
 function formAluno(editId){
   const turmas = DB.turmas.all();
   const a = editId ? DB.alunos.all().find(x=>x.id===editId) : {nome:'',nascimento:'',turmaId:'',horario:'',responsavel:'',telefone:'',valor:'',status:'ativo',vencimentoDia:10};
-  // Sugestão de turmas com vagas
   const alunosPorTurma = {};
   DB.alunos.all().forEach(x=>{ alunosPorTurma[x.turmaId]=(alunosPorTurma[x.turmaId]||0)+1; });
   const turmasSugestao = turmas.filter(t=> (t.maxAlunos - (alunosPorTurma[t.id]||0))>0).map(t=>({...t,vagas:t.maxAlunos-(alunosPorTurma[t.id]||0)}));
@@ -464,10 +433,10 @@ function formAluno(editId){
             <option value="">Selecione...</option>
             ${turmas.map(t=>`<option value="${t.id}" ${a.turmaId===t.id?'selected':''}>${t.nome} — ${t.horario}</option>`).join('')}
           </select>
-          ${turmasSugestao.length?`<p class="text-xs text-emerald-600 mt-1"><i data-lucide="sparkles" class="w-3 h-3 inline"></i> Sugestões com vagas: ${turmasSugestao.map(t=>`<b>${t.nome}</b> (${t.vagas} vagas)`).join(', ')}</p>`:''}
+          ${turmasSugestao.length?`<p class="text-xs text-emerald-600 mt-1"><i data-lucide="sparkles" class="w-3 h-3 inline"></i> Sugestões: ${turmasSugestao.map(t=>`<b>${t.nome}</b> (${t.vagas} vagas)`).join(', ')}</p>`:''}
         </div>
         <div><label class="text-xs font-semibold">Horário</label>
-          <input name="horario" value="${a.horario||''}" placeholder="Ex: Seg/Qua 14h" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+          <input name="horario" value="${a.horario||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
         <div><label class="text-xs font-semibold">Responsável</label>
           <input name="responsavel" required value="${a.responsavel||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
         <div><label class="text-xs font-semibold">Telefone/WhatsApp</label>
@@ -506,21 +475,58 @@ function verAluno(id){
   const a = DB.alunos.all().find(x=>x.id===id); if(!a) return;
   const t = DB.turmas.all().find(x=>x.id===a.turmaId);
   const pags = DB.pagamentos.all().filter(p=>p.alunoId===id).sort((a,b)=>new Date(b.data)-new Date(a.data));
+  const medias = calcularMedias(id);
+  const disciplinas = Object.keys(medias);
+  const mediaGeral = disciplinas.length ? disciplinas.reduce((s,d)=>s+medias[d].media,0)/disciplinas.length : 0;
+
   openModal(a.nome, `
     <div class="space-y-4">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Turma</p><p class="font-semibold text-sm">${t?t.nome:'—'}</p></div>
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Mensalidade</p><p class="font-semibold text-sm">${fmtBRL(a.valor)}</p></div>
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Vencimento</p><p class="font-semibold text-sm">Dia ${a.vencimentoDia||10}</p></div>
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Status</p><p class="font-semibold text-sm capitalize">${a.status}</p></div>
+      <div class="flex gap-2 border-b border-slate-200 dark:border-slate-700">
+        <button class="tab-btn active px-4 py-2 rounded-t-lg font-semibold text-sm" onclick="switchTab(this,'tabInfo')">Informações</button>
+        <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabNotas')">Boletim</button>
+        <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabPags')">Pagamentos</button>
       </div>
-      <div class="p-4 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
-        <p class="text-sm"><b>Responsável:</b> ${a.responsavel}</p>
-        <p class="text-sm"><b>Telefone:</b> ${a.telefone}</p>
-        <p class="text-sm"><b>Nascimento:</b> ${fmtDate(a.nascimento)}</p>
-        <p class="text-sm"><b>Cadastrado em:</b> ${fmtDate(a.dataCadastro)}</p>
+      <div id="tabInfo">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Turma</p><p class="font-semibold text-sm">${t?t.nome:'—'}</p></div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Mensalidade</p><p class="font-semibold text-sm">${fmtBRL(a.valor)}</p></div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Vencimento</p><p class="font-semibold text-sm">Dia ${a.vencimentoDia||10}</p></div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><p class="text-xs text-slate-500">Status</p><p class="font-semibold text-sm capitalize">${a.status}</p></div>
+        </div>
+        <div class="p-4 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 mt-3">
+          <p class="text-sm"><b>Responsável:</b> ${a.responsavel}</p>
+          <p class="text-sm"><b>Telefone:</b> ${a.telefone}</p>
+          <p class="text-sm"><b>Nascimento:</b> ${fmtDate(a.nascimento)}</p>
+          <p class="text-sm"><b>Cadastrado em:</b> ${fmtDate(a.dataCadastro)}</p>
+        </div>
       </div>
-      <div>
+      <div id="tabNotas" class="hidden">
+        <div class="flex items-center justify-between mb-3">
+          <div class="p-3 rounded-xl ${mediaGeral>=6?'bg-emerald-50 dark:bg-emerald-900/20':'bg-red-50 dark:bg-red-900/20'}">
+            <p class="text-xs text-slate-500">Média Geral</p>
+            <p class="text-2xl font-bold ${mediaGeral>=6?'text-emerald-600':'text-red-600'}">${mediaGeral?mediaGeral.toFixed(1):'—'}</p>
+          </div>
+          <button onclick="gerarBoletimPDF('${id}')" class="px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
+        </div>
+        <div class="space-y-2">
+          ${disciplinas.map(d=>{
+            const m = medias[d];
+            const cor = m.media>=6?'emerald':'red';
+            return `<div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+              <div class="flex justify-between items-center mb-2">
+                <p class="font-bold">${d}</p>
+                <span class="badge bg-${cor}-100 text-${cor}-700 dark:bg-${cor}-900/40 dark:text-${cor}-300">Média: ${m.media.toFixed(1)}</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="p-2 rounded bg-white dark:bg-slate-800 text-center"><p class="text-slate-500">1º Trim</p><p class="font-bold">${m[1]?m[1].toFixed(1):'—'}</p></div>
+                <div class="p-2 rounded bg-white dark:bg-slate-800 text-center"><p class="text-slate-500">2º Trim</p><p class="font-bold">${m[2]?m[2].toFixed(1):'—'}</p></div>
+                <div class="p-2 rounded bg-white dark:bg-slate-800 text-center"><p class="text-slate-500">3º Trim</p><p class="font-bold">${m[3]?m[3].toFixed(1):'—'}</p></div>
+              </div>
+            </div>`;
+          }).join('') || '<p class="text-sm text-slate-500">Nenhuma nota registrada.</p>'}
+        </div>
+      </div>
+      <div id="tabPags" class="hidden">
         <div class="flex items-center justify-between mb-2">
           <h4 class="font-bold">Histórico de pagamentos</h4>
           <button onclick="registrarPagamento('${a.id}')" class="px-3 py-1.5 rounded-lg gradient-brand text-white text-sm font-semibold flex items-center gap-1"><i data-lucide="plus" class="w-4 h-4"></i>Registrar</button>
@@ -535,15 +541,397 @@ function verAluno(id){
     </div>
   `);
 }
+function switchTab(btn,tabId){
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(b=>{b.classList.remove('active');b.classList.add('bg-slate-100','dark:bg-slate-700');});
+  btn.classList.add('active'); btn.classList.remove('bg-slate-100','dark:bg-slate-700');
+  const modal = document.getElementById('modalBody');
+  ['tabInfo','tabNotas','tabPags'].forEach(t=>{
+    const el = modal.querySelector('#'+t);
+    if(el) el.classList.toggle('hidden', t!==tabId);
+  });
+}
 function delAluno(id){
   if(!confirm('Excluir este aluno?')) return;
   DB.alunos.save(DB.alunos.all().filter(a=>a.id!==id));
   toast('Aluno excluído'); renderAlunos();
 }
 
-/* =========================================================
-   PAGAMENTOS
-   ========================================================= */
+/* ============ NOTAS ============ */
+let chartNotas;
+function renderNotas(){
+  const turmas = DB.turmas.all();
+  const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
+  const notas = DB.notas.all();
+
+  // Média por turma
+  const mediaPorTurma = turmas.map(t=>{
+    const alunosTurma = alunos.filter(a=>a.turmaId===t.id);
+    const notasTurma = notas.filter(n=>alunosTurma.some(a=>a.id===n.alunoId));
+    const media = notasTurma.length ? notasTurma.reduce((s,n)=>s+n.nota,0)/notasTurma.length : 0;
+    return {turma:t.nome,media};
+  });
+
+  // Alunos com menor desempenho
+  const desempenhoAlunos = alunos.map(a=>{
+    const notasA = notas.filter(n=>n.alunoId===a.id);
+    const media = notasA.length ? notasA.reduce((s,n)=>s+n.nota,0)/notasA.length : 0;
+    return {aluno:a.nome,media,turma:DB.turmas.all().find(t=>t.id===a.turmaId)?.nome||''};
+  }).sort((a,b)=>a.media-b.media);
+  const baixos = desempenhoAlunos.filter(a=>a.media<6 && a.media>0).slice(0,5);
+
+  document.getElementById('content').innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      ${statCard('Total de Notas', notas.length, 'clipboard-list', 'gradient-brand', 'text-white')}
+      ${statCard('Média Geral', (notas.length?(notas.reduce((s,n)=>s+n.nota,0)/notas.length):0).toFixed(1), 'target', 'gradient-mint', 'text-white')}
+      ${statCard('Alunos em risco', baixos.length, 'alert-triangle', 'gradient-peach', 'text-white')}
+      ${statCard('Aprovados (>6)', desempenhoAlunos.filter(a=>a.media>=6).length, 'check-circle', 'gradient-lav', 'text-white')}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-4">Média por Turma</h3>
+        <canvas id="chartNotas" height="110"></canvas>
+      </div>
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-4">⚠️ Alunos em risco</h3>
+        <div class="space-y-2">
+          ${baixos.map(a=>`<div class="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <div>
+              <p class="font-semibold text-sm">${a.aluno}</p>
+              <p class="text-xs text-slate-500">${a.turma}</p>
+            </div>
+            <span class="badge bg-red-200 text-red-900">${a.media.toFixed(1)}</span>
+          </div>`).join('') || '<p class="text-sm text-slate-500">Nenhum aluno em risco.</p>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold">Lançamento de Notas</h3>
+        <button onclick="formNota()" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold flex items-center gap-2">
+          <i data-lucide="plus" class="w-4 h-4"></i> Nova nota
+        </button>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button onclick="lancarTurma()" class="px-4 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i> Lançar por turma</button>
+        <button onclick="lancarMassa()" class="px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="zap" class="w-4 h-4"></i> Lançamento em massa</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 dark:bg-slate-700/50 text-left">
+            <tr><th class="p-3">Aluno</th><th class="p-3">Disciplina</th><th class="p-3">Tipo</th><th class="p-3">Trim</th><th class="p-3">Nota</th><th class="p-3">Data</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${notas.sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,30).map(n=>{
+              const a = alunos.concat(DB.alunos.all()).find(x=>x.id===n.alunoId);
+              const cor = n.nota>=6?'text-emerald-600':'text-red-600';
+              return `<tr class="border-t border-slate-200 dark:border-slate-700">
+                <td class="p-3 font-semibold">${a?a.nome:'—'}</td>
+                <td class="p-3">${n.disciplina}</td>
+                <td class="p-3"><span class="badge bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">${n.tipo}</span></td>
+                <td class="p-3">${n.trimestre}º</td>
+                <td class="p-3 font-bold ${cor}">${n.nota.toFixed(1)}/${n.notaMax}</td>
+                <td class="p-3 text-slate-500">${fmtDate(n.data)}</td>
+                <td class="p-3 text-right"><button onclick="delNota('${n.id}')" class="text-red-600 hover:underline text-xs">Excluir</button></td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="7" class="p-6 text-center text-slate-500">Nenhuma nota registrada.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const ctx = document.getElementById('chartNotas').getContext('2d');
+  if(chartNotas) chartNotas.destroy();
+  chartNotas = new Chart(ctx,{
+    type:'bar',
+    data:{labels:mediaPorTurma.map(m=>m.turma),datasets:[{label:'Média',data:mediaPorTurma.map(m=>m.media),backgroundColor:'#3f6bff',borderRadius:8}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:10,grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}
+  });
+}
+
+function formNota(){
+  const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
+  const turmas = DB.turmas.all();
+  openModal('Nova nota', `
+    <form id="formN" class="space-y-4">
+      <div><label class="text-xs font-semibold">Aluno</label>
+        <select name="alunoId" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">Selecione...</option>
+          ${alunos.map(a=>{const t=turmas.find(x=>x.id===a.turmaId);return `<option value="${a.id}">${a.nome} — ${t?t.nome:''}</option>`;}).join('')}
+        </select></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Disciplina</label>
+          <input name="disciplina" required placeholder="Ex: Matemática" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Tipo</label>
+          <select name="tipo" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option>Prova</option><option>Trabalho</option><option>Exercício</option><option>Participação</option>
+          </select></div>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold">Nota</label>
+          <input type="number" step="0.1" name="nota" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Nota máxima</label>
+          <input type="number" step="0.1" name="notaMax" value="10" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Trimestre</label>
+          <select name="trimestre" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option value="1">1º</option><option value="2">2º</option><option value="3">3º</option>
+          </select></div>
+      </div>
+      <div><label class="text-xs font-semibold">Data</label>
+        <input type="date" name="data" value="${new Date().toISOString().split('T')[0]}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('formN').addEventListener('submit',e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    data.nota = parseFloat(data.nota);
+    data.notaMax = parseFloat(data.notaMax);
+    data.trimestre = parseInt(data.trimestre);
+    data.id = id();
+    const lista = DB.notas.all();
+    lista.push(data);
+    DB.notas.save(lista);
+    closeModal(); toast('Nota registrada!'); renderNotas();
+  });
+}
+
+function lancarTurma(){
+  const turmas = DB.turmas.all();
+  openModal('Lançar notas por turma', `
+    <form id="formLT" class="space-y-4">
+      <div><label class="text-xs font-semibold">Turma</label>
+        <select id="ltTurma" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">Selecione...</option>
+          ${turmas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('')}
+        </select></div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold">Disciplina</label>
+          <input id="ltDisc" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Tipo</label>
+          <select id="ltTipo" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option>Prova</option><option>Trabalho</option><option>Exercício</option>
+          </select></div>
+        <div><label class="text-xs font-semibold">Trimestre</label>
+          <select id="ltTrim" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option value="1">1º</option><option value="2">2º</option><option value="3">3º</option>
+          </select></div>
+      </div>
+      <div id="ltAlunos" class="space-y-2 max-h-80 overflow-y-auto">
+        <p class="text-sm text-slate-500 text-center py-4">Selecione uma turma para carregar os alunos.</p>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar todas</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('ltTurma').addEventListener('change',e=>{
+    const tid = e.target.value;
+    const alunos = DB.alunos.all().filter(a=>a.turmaId===tid && a.status==='ativo');
+    const div = document.getElementById('ltAlunos');
+    if(!alunos.length){ div.innerHTML = '<p class="text-sm text-slate-500 text-center py-4">Nenhum aluno ativo nesta turma.</p>'; return; }
+    div.innerHTML = alunos.map(a=>`
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+        <div class="w-9 h-9 rounded-full gradient-brand flex items-center justify-center text-white font-bold text-sm">${a.nome[0]}</div>
+        <div class="flex-1">
+          <p class="font-semibold text-sm">${a.nome}</p>
+          <p class="text-xs text-slate-500">Resp.: ${a.responsavel}</p>
+        </div>
+        <input type="number" step="0.1" min="0" max="10" class="nota-lt w-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" data-aluno="${a.id}" placeholder="0-10"/>
+      </div>
+    `).join('');
+  });
+  document.getElementById('formLT').addEventListener('submit',e=>{
+    e.preventDefault();
+    const tid = document.getElementById('ltTurma').value;
+    const disc = document.getElementById('ltDisc').value.trim();
+    const tipo = document.getElementById('ltTipo').value;
+    const trim = parseInt(document.getElementById('ltTrim').value);
+    if(!tid || !disc) return toast('Preencha turma e disciplina','error');
+    const inputs = document.querySelectorAll('.nota-lt');
+    const lista = DB.notas.all();
+    let count = 0;
+    inputs.forEach(inp=>{
+      const v = parseFloat(inp.value);
+      if(!isNaN(v)){
+        lista.push({id:id(),alunoId:inp.dataset.aluno,disciplina:disc,tipo,nota:v,notaMax:10,trimestre:trim,data:new Date().toISOString()});
+        count++;
+      }
+    });
+    DB.notas.save(lista);
+    closeModal(); toast(`${count} nota(s) registrada(s)!`); renderNotas();
+  });
+}
+
+function lancarMassa(){
+  const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
+  openModal('Lançamento em massa', `
+    <p class="text-sm text-slate-500 mb-4">Selecione os alunos e lance a mesma nota para todos (útil para provas em grupo).</p>
+    <form id="formLM" class="space-y-4">
+      <div class="max-h-48 overflow-y-auto space-y-1 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+        ${alunos.map(a=>`<label class="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer">
+          <input type="checkbox" class="checkbox-custom lm-aluno" value="${a.id}"/>
+          <span class="text-sm">${a.nome}</span>
+        </label>`).join('')}
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Disciplina</label>
+          <input name="disciplina" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Tipo</label>
+          <select name="tipo" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option>Prova</option><option>Trabalho</option><option>Exercício</option>
+          </select></div>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold">Nota (todos)</label>
+          <input type="number" step="0.1" name="nota" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Trimestre</label>
+          <select name="trimestre" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option value="1">1º</option><option value="2">2º</option><option value="3">3º</option>
+          </select></div>
+        <div><label class="text-xs font-semibold">Nota máx</label>
+          <input type="number" name="notaMax" value="10" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Aplicar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('formLM').addEventListener('submit',e=>{
+    e.preventDefault();
+    const ids = Array.from(document.querySelectorAll('.lm-aluno:checked')).map(c=>c.value);
+    if(!ids.length) return toast('Selecione ao menos um aluno','error');
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    const lista = DB.notas.all();
+    ids.forEach(aid=>{
+      lista.push({id:id(),alunoId:aid,disciplina:data.disciplina,tipo:data.tipo,nota:parseFloat(data.nota),notaMax:parseFloat(data.notaMax)||10,trimestre:parseInt(data.trimestre),data:new Date().toISOString()});
+    });
+    DB.notas.save(lista);
+    closeModal(); toast(`${ids.length} notas registradas!`); renderNotas();
+  });
+}
+
+function delNota(nid){
+  if(!confirm('Excluir esta nota?')) return;
+  DB.notas.save(DB.notas.all().filter(n=>n.id!==nid));
+  toast('Nota excluída'); renderNotas();
+}
+
+function gerarBoletimPDF(alunoId){
+  const a = DB.alunos.all().find(x=>x.id===alunoId); if(!a) return;
+  const t = DB.turmas.all().find(x=>x.id===a.turmaId);
+  const medias = calcularMedias(alunoId);
+  const disciplinas = Object.keys(medias);
+  const mediaGeral = disciplinas.length ? disciplinas.reduce((s,d)=>s+medias[d].media,0)/disciplinas.length : 0;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(18); doc.text('Boletim Escolar',14,20);
+  doc.setFontSize(10); doc.text('EduGestão — Reforço Escolar',14,28);
+  doc.setDrawColor(63,107,255); doc.setLineWidth(1); doc.line(14,32,196,32);
+
+  doc.setFontSize(11);
+  doc.text(`Aluno: ${a.nome}`,14,42);
+  doc.text(`Turma: ${t?t.nome:'—'}`,14,50);
+  doc.text(`Responsável: ${a.responsavel}`,14,58);
+  doc.text(`Média Geral: ${mediaGeral.toFixed(1)}`,140,42);
+
+  const body = disciplinas.map(d=>{
+    const m = medias[d];
+    return [d, m[1]?m[1].toFixed(1):'—', m[2]?m[2].toFixed(1):'—', m[3]?m[3].toFixed(1):'—', m.media.toFixed(1), m.media>=6?'Aprovado':'Reprovado'];
+  });
+  doc.autoTable({
+    startY:65,
+    head:[['Disciplina','1º Trim','2º Trim','3º Trim','Média','Situação']],
+    body,
+    styles:{fontSize:9},
+    headStyles:{fillColor:[63,107,255]}
+  });
+
+  doc.save(`boletim-${a.nome.replace(/\s/g,'_')}.pdf`);
+  toast('Boletim gerado!');
+}
+
+/* ============ TURMAS ============ */
+function renderTurmas(){
+  const turmas = DB.turmas.all();
+  const alunos = DB.alunos.all();
+  const alunosPorTurma = {};
+  alunos.forEach(a=>{ alunosPorTurma[a.turmaId]=(alunosPorTurma[a.turmaId]||0)+1; });
+  document.getElementById('content').innerHTML = `
+    <div class="flex items-center justify-between mb-5">
+      <p class="text-sm text-slate-500">Gerencie turmas e acompanhe a ocupação.</p>
+      <button onclick="formTurma()" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nova turma</button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      ${turmas.map(t=>{
+        const qtd = alunosPorTurma[t.id]||0;
+        const vagas = t.maxAlunos - qtd;
+        const pct = Math.round(qtd/t.maxAlunos*100);
+        const notas = DB.notas.all().filter(n=>alunos.some(a=>a.turmaId===t.id && a.id===n.alunoId));
+        const media = notas.length ? notas.reduce((s,n)=>s+n.nota,0)/notas.length : 0;
+        return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <h3 class="font-bold text-lg">${t.nome}</h3>
+              <p class="text-sm text-slate-500"><i data-lucide="user" class="w-3.5 h-3.5 inline"></i> ${t.professor}</p>
+              <p class="text-sm text-slate-500"><i data-lucide="clock" class="w-3.5 h-3.5 inline"></i> ${t.horario}</p>
+            </div>
+            <button onclick="formTurma('${t.id}')" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+          </div>
+          <div class="space-y-2">
+            <div class="flex justify-between text-sm"><span>Alunos</span><b>${qtd}/${t.maxAlunos}</b></div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2"><div class="h-2 rounded-full gradient-brand" style="width:${pct}%"></div></div>
+            <div class="flex justify-between text-xs text-slate-500"><span>Ocupação ${pct}%</span><span class="font-semibold ${vagas>0?'text-emerald-600':'text-red-600'}">${vagas>0?vagas+' vagas':'Lotada'}</span></div>
+            <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between text-xs">
+              <span class="text-slate-500">Média da turma</span>
+              <span class="font-bold ${media>=6?'text-emerald-600':'text-red-600'}">${media?media.toFixed(1):'—'}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('') || '<p class="text-slate-500">Nenhuma turma cadastrada.</p>'}
+    </div>
+  `;
+}
+function formTurma(editId){
+  const t = editId ? DB.turmas.all().find(x=>x.id===editId) : {nome:'',professor:'',horario:'',maxAlunos:10,disciplinas:[]};
+  openModal(editId?'Editar turma':'Nova turma',`
+    <form id="formT" class="space-y-4">
+      <div><label class="text-xs font-semibold">Nome da turma</label><input name="nome" required value="${t.nome||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Professor</label><input name="professor" required value="${t.professor||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Horário</label><input name="horario" required value="${t.horario||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      </div>
+      <div><label class="text-xs font-semibold">Disciplinas (separadas por vírgula)</label><input name="disciplinas" value="${(t.disciplinas||[]).join(', ')}" placeholder="Matemática, Português" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      <div><label class="text-xs font-semibold">Máximo de alunos</label><input type="number" name="maxAlunos" required value="${t.maxAlunos||10}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('formT').addEventListener('submit',e=>{
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    data.maxAlunos = parseInt(data.maxAlunos)||10;
+    data.disciplinas = data.disciplinas.split(',').map(d=>d.trim()).filter(Boolean);
+    const lista = DB.turmas.all();
+    if(editId){ const i=lista.findIndex(x=>x.id===editId); lista[i]={...lista[i],...data}; }
+    else { data.id=id(); lista.push(data); }
+    DB.turmas.save(lista); closeModal(); toast('Turma salva!'); renderTurmas();
+  });
+}
+
+/* ============ PAGAMENTOS ============ */
 function renderPagamentos(){
   const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
   const pags = DB.pagamentos.all().sort((a,b)=>new Date(b.data)-new Date(a.data));
@@ -594,7 +982,7 @@ function registrarPagamento(alunoId){
           <label class="cursor-pointer"><input type="radio" name="metodo" value="Cartão" class="hidden peer"/><div class="p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-900/20 text-center font-semibold">Cartão de Crédito</div></label>
         </div></div>
       <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm">
-        <p class="font-bold text-amber-800 dark:text-amber-300">⚠️ ATENÇÃO</p>
+        <p class="font-bold text-amber-800 dark:text-amber-300">️ ATENÇÃO</p>
         <p class="text-amber-700 dark:text-amber-400">LIGUE A MÁQUINA DE CARTÃO OU REALIZE O PAGAMENTO VIA PIX.</p>
       </div>
       <div class="flex justify-end gap-2">
@@ -603,7 +991,6 @@ function registrarPagamento(alunoId){
       </div>
     </form>
   `);
-  // Auto-preenche valor ao selecionar aluno
   const sel = document.querySelector('#formP [name=alunoId]');
   const val = document.querySelector('#formP [name=valor]');
   sel.addEventListener('change',()=>{
@@ -642,76 +1029,9 @@ function comprovante(pid){
   toast('Comprovante gerado!');
 }
 
-/* =========================================================
-   TURMAS
-   ========================================================= */
-function renderTurmas(){
-  const turmas = DB.turmas.all();
-  const alunos = DB.alunos.all();
-  const alunosPorTurma = {};
-  alunos.forEach(a=>{ alunosPorTurma[a.turmaId]=(alunosPorTurma[a.turmaId]||0)+1; });
-  document.getElementById('content').innerHTML = `
-    <div class="flex items-center justify-between mb-5">
-      <p class="text-sm text-slate-500">Gerencie turmas e acompanhe a ocupação.</p>
-      <button onclick="formTurma()" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nova turma</button>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      ${turmas.map(t=>{
-        const qtd = alunosPorTurma[t.id]||0;
-        const vagas = t.maxAlunos - qtd;
-        const pct = Math.round(qtd/t.maxAlunos*100);
-        return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-          <div class="flex items-start justify-between mb-3">
-            <div>
-              <h3 class="font-bold text-lg">${t.nome}</h3>
-              <p class="text-sm text-slate-500"><i data-lucide="user" class="w-3.5 h-3.5 inline"></i> ${t.professor}</p>
-              <p class="text-sm text-slate-500"><i data-lucide="clock" class="w-3.5 h-3.5 inline"></i> ${t.horario}</p>
-            </div>
-            <button onclick="formTurma('${t.id}')" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-          </div>
-          <div class="space-y-2">
-            <div class="flex justify-between text-sm"><span>Alunos</span><b>${qtd}/${t.maxAlunos}</b></div>
-            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2"><div class="h-2 rounded-full gradient-brand" style="width:${pct}%"></div></div>
-            <div class="flex justify-between text-xs text-slate-500"><span>Ocupação ${pct}%</span><span class="font-semibold ${vagas>0?'text-emerald-600':'text-red-600'}">${vagas>0?vagas+' vagas disponíveis':'Lotada'}</span></div>
-          </div>
-        </div>`;
-      }).join('') || '<p class="text-slate-500">Nenhuma turma cadastrada.</p>'}
-    </div>
-  `;
-}
-function formTurma(editId){
-  const t = editId ? DB.turmas.all().find(x=>x.id===editId) : {nome:'',professor:'',horario:'',maxAlunos:10};
-  openModal(editId?'Editar turma':'Nova turma',`
-    <form id="formT" class="space-y-4">
-      <div><label class="text-xs font-semibold">Nome da turma</label><input name="nome" required value="${t.nome||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-      <div class="grid grid-cols-2 gap-4">
-        <div><label class="text-xs font-semibold">Professor</label><input name="professor" required value="${t.professor||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-        <div><label class="text-xs font-semibold">Horário</label><input name="horario" required value="${t.horario||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-      </div>
-      <div><label class="text-xs font-semibold">Máximo de alunos</label><input type="number" name="maxAlunos" required value="${t.maxAlunos||10}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-      <div class="flex justify-end gap-2">
-        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
-        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
-      </div>
-    </form>
-  `);
-  document.getElementById('formT').addEventListener('submit',e=>{
-    e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.target).entries());
-    data.maxAlunos = parseInt(data.maxAlunos)||10;
-    const lista = DB.turmas.all();
-    if(editId){ const i=lista.findIndex(x=>x.id===editId); lista[i]={...lista[i],...data}; }
-    else { data.id=id(); lista.push(data); }
-    DB.turmas.save(lista); closeModal(); toast('Turma salva!'); renderTurmas();
-  });
-}
-
-/* =========================================================
-   COMUNICADOS
-   ========================================================= */
+/* ============ COMUNICADOS ============ */
 function renderComunicados(){
   const alunos = DB.alunos.all();
-  const turmas = DB.turmas.all();
   const hist = DB.comunicados.all().sort((a,b)=>new Date(b.data)-new Date(a.data));
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -723,12 +1043,12 @@ function renderComunicados(){
             <button onclick="marcarTodos()" class="px-3 py-1.5 rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 text-xs font-semibold">Todos</button>
             <button onclick="desmarcarTodos()" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-semibold">Limpar</button>
           </div>
-          <div id="listaDest" class="max-h-64 overflow-y-auto space-y-1 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div class="max-h-64 overflow-y-auto space-y-1 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
             ${alunos.map(a=>`
               <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer">
                 <input type="checkbox" class="checkbox-custom dest" value="${a.id}"/>
                 <div class="flex-1">
-                  <p class="text-sm font-semibold">☐ ${a.nome}</p>
+                  <p class="text-sm font-semibold"> ${a.nome}</p>
                   <p class="text-xs text-slate-500">Resp.: ${a.responsavel} • ${a.telefone}</p>
                 </div>
               </label>`).join('')}
@@ -737,7 +1057,6 @@ function renderComunicados(){
         <div><label class="text-xs font-semibold">Mensagem</label>
           <textarea id="msgCom" rows="5" placeholder="Digite a mensagem..." class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea></div>
         <button onclick="enviarComunicado()" class="mt-3 w-full px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2"><i data-lucide="message-circle" class="w-4 h-4"></i> Enviar pelo WhatsApp</button>
-        <p class="text-xs text-slate-500 mt-2">* Integração com API WhatsApp (Z-API/Evolution) pendente — mensagens serão registradas no histórico.</p>
       </div>
       <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-3">Histórico</h3>
@@ -760,7 +1079,6 @@ function enviarComunicado(){
   if(!msg) return toast('Digite a mensagem','error');
   const alunos = DB.alunos.all();
   const destinatarios = ids.map(i=>alunos.find(a=>a.id===i)).filter(Boolean);
-  // Simulação: abrir WhatsApp Web para cada responsável
   destinatarios.forEach(a=>{
     const url = `https://wa.me/${a.telefone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
     window.open(url,'_blank');
@@ -772,9 +1090,7 @@ function enviarComunicado(){
   setTimeout(renderComunicados,500);
 }
 
-/* =========================================================
-   FINANCEIRO
-   ========================================================= */
+/* ============ FINANCEIRO ============ */
 function renderFinanceiro(){
   const pags = DB.pagamentos.all();
   const alunos = DB.alunos.all();
@@ -865,32 +1181,29 @@ function drawFinChart(mode){
   chartFin = new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Receita',data,borderColor:'#3f6bff',backgroundColor:'rgba(63,107,255,.15)',fill:true,tension:.35}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
 }
 
-/* =========================================================
-   AUTOMAÇÃO (preparada para API WhatsApp)
-   ========================================================= */
+/* ============ AUTOMAÇÃO ============ */
 function renderAutomacao(){
   const cfg = DB.config.get();
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-3">🤖 Configuração da API WhatsApp</h3>
-        <p class="text-sm text-slate-500 mb-4">Integração preparada para Z-API, Evolution API ou Twilio.</p>
         <div class="space-y-3">
-          <div><label class="text-xs font-semibold">Endpoint da API</label>
-            <input id="cfgEndpoint" value="${cfg.endpoint||''}" placeholder="https://api.z-api.io/..." class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+          <div><label class="text-xs font-semibold">Endpoint</label>
+            <input id="cfgEndpoint" value="${cfg.endpoint||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
           <div><label class="text-xs font-semibold">Token</label>
             <input id="cfgToken" type="password" value="${cfg.token||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-          <button onclick="saveCfg()" class="w-full px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar configuração</button>
+          <button onclick="saveCfg()" class="w-full px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
         </div>
       </div>
       <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-3">Fluxo automático</h3>
         <ul class="space-y-3 text-sm">
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="bell" class="w-5 h-5 text-amber-500"></i><div><b>3 dias antes do vencimento</b><p class="text-xs text-slate-500">Lembrete automático ao responsável.</p></div></li>
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i><div><b>No dia do vencimento</b><p class="text-xs text-slate-500">Aviso de pagamento pendente.</p></div></li>
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i><div><b>Após pagamento registrado</b><p class="text-xs text-slate-500">Confirmação automática + atualização do status.</p></div></li>
+          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="bell" class="w-5 h-5 text-amber-500"></i><div><b>3 dias antes</b><p class="text-xs text-slate-500">Lembrete automático.</p></div></li>
+          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i><div><b>No vencimento</b><p class="text-xs text-slate-500">Aviso de pendência.</p></div></li>
+          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i><div><b>Após pagamento</b><p class="text-xs text-slate-500">Confirmação automática.</p></div></li>
         </ul>
-        <button onclick="simularAutomacao()" class="mt-4 w-full px-5 py-2.5 rounded-xl gradient-mint text-white font-semibold flex items-center justify-center gap-2"><i data-lucide="play" class="w-4 h-4"></i> Simular verificação agora</button>
+        <button onclick="simularAutomacao()" class="mt-4 w-full px-5 py-2.5 rounded-xl gradient-mint text-white font-semibold flex items-center justify-center gap-2"><i data-lucide="play" class="w-4 h-4"></i> Simular verificação</button>
       </div>
     </div>
   `;
@@ -906,23 +1219,21 @@ function simularAutomacao(){
   alunos.forEach(a=>{
     const v = new Date(hoje.getFullYear(), hoje.getMonth(), a.vencimentoDia||10);
     const diff = Math.round((v-hoje)/(1000*60*60*24));
-    if(diff===3){ avisos++; console.log('[AUTO] Lembrete 3 dias:',a.nome,a.telefone); }
-    else if(diff===0){ avisos++; console.log('[AUTO] Venceu hoje:',a.nome,a.telefone); }
-    else if(diff<0){ avisos++; console.log('[AUTO] Atrasado:',a.nome,a.telefone); }
+    if(diff===3||diff===0||diff<0) avisos++;
   });
-  toast(`Verificação concluída. ${avisos} ação(ões) identificada(s). Veja o console.`);
+  toast(`Verificação: ${avisos} ação(ões) identificada(s).`);
 }
 
-/* =========================================================
-   RELATÓRIOS
-   ========================================================= */
+/* ============ RELATÓRIOS ============ */
 function renderRelatorios(){
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-      ${relCard('Alunos','Lista completa de alunos cadastrados','users','relAlunos')}
-      ${relCard('Financeiro','Receitas, pagamentos e inadimplência','wallet','relFin')}
-      ${relCard('Turmas','Ocupação e distribuição de alunos','book-open','relTurmas')}
-      ${relCard('Inadimplência','Alunos com pagamento em atraso','alert-triangle','relInad')}
+      ${relCard('Alunos','Lista completa de alunos','users','relAlunos')}
+      ${relCard('Financeiro','Receitas e pagamentos','wallet','relFin')}
+      ${relCard('Turmas','Ocupação e distribuição','book-open','relTurmas')}
+      ${relCard('Inadimplência','Pagamentos em atraso','alert-triangle','relInad')}
+      ${relCard('Desempenho','Notas e médias dos alunos','clipboard-list','relDesemp')}
+      ${relCard('Boletins','Boletim individual por aluno','file-text','relBoletim')}
     </div>
   `;
 }
@@ -969,6 +1280,26 @@ function relInad(fmt){
   }).map(a=>[a.nome,a.responsavel,a.telefone,fmtBRL(a.valor),'Dia '+a.vencimentoDia]);
   exportar(fmt,'Inadimplentes',['Aluno','Responsável','Telefone','Valor','Vencimento'],rows);
 }
+function relDesemp(fmt){
+  const rows = DB.alunos.all().filter(a=>a.status==='ativo').map(a=>{
+    const medias = calcularMedias(a.id);
+    const discs = Object.keys(medias);
+    const mediaGeral = discs.length ? discs.reduce((s,d)=>s+medias[d].media,0)/discs.length : 0;
+    return [a.nome, discs.join(', '), mediaGeral.toFixed(1), mediaGeral>=6?'Aprovado':'Reprovado'];
+  });
+  exportar(fmt,'Desempenho',['Aluno','Disciplinas','Média Geral','Situação'],rows);
+}
+function relBoletim(fmt){
+  const rows = [];
+  DB.alunos.all().filter(a=>a.status==='ativo').forEach(a=>{
+    const medias = calcularMedias(a.id);
+    Object.keys(medias).forEach(d=>{
+      const m = medias[d];
+      rows.push([a.nome,d,m[1]?m[1].toFixed(1):'—',m[2]?m[2].toFixed(1):'—',m[3]?m[3].toFixed(1):'—',m.media.toFixed(1)]);
+    });
+  });
+  exportar(fmt,'Boletim',['Aluno','Disciplina','1º Trim','2º Trim','3º Trim','Média'],rows);
+}
 function exportar(fmt,nome,heads,rows){
   if(fmt==='xlsx'){
     const ws = XLSX.utils.aoa_to_sheet([heads,...rows]);
@@ -984,9 +1315,7 @@ function exportar(fmt,nome,heads,rows){
   toast('Relatório gerado!');
 }
 
-/* =========================================================
-   INIT
-   ========================================================= */
+/* ============ INIT ============ */
 go('dashboard');
 lucide.createIcons();
 </script>
