@@ -79,6 +79,9 @@
       <a data-page="alunos" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="users" class="w-5 h-5"></i><span>Alunos</span>
       </a>
+      <a data-page="matriculas" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
+        <i data-lucide="file-badge" class="w-5 h-5"></i><span>Matrículas</span>
+      </a>
       <a data-page="turmas" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="book-open" class="w-5 h-5"></i><span>Turmas</span>
       </a>
@@ -165,12 +168,23 @@ const DB = {
   frequencias:{ all:()=>DB._get('frequencias'),save:(a)=>DB._set('frequencias',a) },
   tarefas:    { all:()=>DB._get('tarefas'),    save:(a)=>DB._set('tarefas',a) },
   portfolios: { all:()=>DB._get('portfolios'), save:(a)=>DB._set('portfolios',a) },
+  matriculas: { all:()=>DB._get('matriculas'), save:(a)=>DB._set('matriculas',a) },
+  documentos: { all:()=>DB._get('documentos'), save:(a)=>DB._set('documentos',a) },
   config:     { get:()=>JSON.parse(localStorage.getItem('edu_config')||'{}'),
                 set:(c)=>localStorage.setItem('edu_config',JSON.stringify(c)) }
 };
 
+const TIPOS_DOCUMENTOS = [
+  {key:'RG_ALUNO', label:'RG do aluno', icone:'id-card'},
+  {key:'CPF_RESP', label:'CPF do responsável', icone:'user'},
+  {key:'COMPROVANTE', label:'Comprovante de residência', icone:'home'},
+  {key:'FOTO_3X4', label:'Foto 3x4', icone:'camera'},
+  {key:'TERMO', label:'Termo de responsabilidade assinado', icone:'file-signature'},
+  {key:'HISTORICO', label:'Histórico escolar da escola regular', icone:'graduation-cap'}
+];
+
 (function seed(){
-  if(!localStorage.getItem('edu_seeded')){
+  if(!localStorage.getItem('edu_seeded_v2')){
     DB.turmas.save([
       {id:id(),nome:'Matemática 6º ano',professor:'Ana Souza',horario:'Seg/Qua 14h',maxAlunos:10,disciplinas:['Matemática']},
       {id:id(),nome:'Português 7º ano',professor:'Carlos Lima',horario:'Ter/Qui 15h',maxAlunos:8,disciplinas:['Português']},
@@ -184,6 +198,42 @@ const DB = {
       {id:id(),nome:'Ana Costa',nascimento:'2013-11-30',turmaId:DB.turmas.all()[2].id,horario:'Sex 16h',responsavel:'Márcia Costa',telefone:'5511955554444',valor:220,status:'inativo',dataCadastro:hoje.toISOString(),vencimentoDia:5}
     ];
     DB.alunos.save(alunos);
+
+    const matriculasSeed = alunos.map((a, i) => ({
+      id: id(),
+      alunoId: a.id,
+      numero: `2024-${String(i+1).padStart(3,'0')}`,
+      periodoLetivo: '2024/1',
+      dataMatricula: new Date(hoje.getFullYear(), hoje.getMonth()-i, 15).toISOString(),
+      status: a.status === 'ativo' ? 'ativa' : 'encerrada',
+      escolaRegular: ['Escola Municipal Santos Dumont', 'Colégio Estadual Tiradentes', 'Escola Particular Monteiro Lobato', 'Escola Municipal Rui Barbosa'][i],
+      serieAno: ['6º ano', '6º ano', '7º ano', '8º ano'][i],
+      motivoReforco: ['Dificuldade em matemática', 'Melhoria de notas', 'Preparação para prova', 'Reforço geral'][i],
+      endereco: 'Rua das Flores, 123 - Centro',
+      observacoes: i === 0 ? 'Aluna com dificuldade específica em frações' : ''
+    }));
+    DB.matriculas.save(matriculasSeed);
+
+    const docsSeed = [];
+    matriculasSeed.forEach((m, i) => {
+      TIPOS_DOCUMENTOS.forEach((tipo, j) => {
+        const entregue = (i === 0) || (i === 1 && j < 4) || (i === 2 && j < 2) || (i === 3 && j < 5);
+        if (entregue) {
+          docsSeed.push({
+            id: id(),
+            matriculaId: m.id,
+            alunoId: m.alunoId,
+            tipo: tipo.key,
+            nomeArquivo: `${tipo.label.replace(/\s/g,'_')}.pdf`,
+            fileType: 'application/pdf',
+            fileData: '',
+            status: 'entregue',
+            dataUpload: new Date().toISOString()
+          });
+        }
+      });
+    });
+    DB.documentos.save(docsSeed);
 
     const notasSeed = [];
     alunos.forEach(a=>{
@@ -222,7 +272,7 @@ const DB = {
       {id:id(),alunoId:alunos[0].id,valor:250,metodo:'PIX',data:new Date(hoje.getFullYear(),hoje.getMonth(),5).toISOString(),referente:'Mensal'},
       {id:id(),alunoId:alunos[2].id,valor:300,metodo:'Cartão',data:new Date(hoje.getFullYear(),hoje.getMonth(),3).toISOString(),referente:'Mensal'}
     ]);
-    localStorage.setItem('edu_seeded','1');
+    localStorage.setItem('edu_seeded_v2','1');
   }
 })();
 
@@ -267,18 +317,43 @@ function getTarefasAluno(alunoId){
   return DB.tarefas.all().filter(t=>t.status==='ativa' && (t.turmaId===aluno.turmaId || t.alunosIds.includes(alunoId)));
 }
 
+function getMatricula(alunoId){
+  return DB.matriculas.all().find(m => m.alunoId === alunoId);
+}
+
+function getDocumentosMatricula(matriculaId){
+  return DB.documentos.all().filter(d => d.matriculaId === matriculaId);
+}
+
+function getDocsStatus(matriculaId){
+  const docs = getDocumentosMatricula(matriculaId);
+  const entregues = docs.filter(d => d.status === 'entregue').length;
+  const pendentes = TIPOS_DOCUMENTOS.length - entregues;
+  return {entregues, pendentes, total: TIPOS_DOCUMENTOS.length, completo: pendentes === 0};
+}
+
+function gerarNumeroMatricula(){
+  const ano = new Date().getFullYear();
+  const matriculas = DB.matriculas.all();
+  const doAno = matriculas.filter(m => m.numero && m.numero.startsWith(ano+'-'));
+  const seq = doAno.length + 1;
+  return `${ano}-${String(seq).padStart(3,'0')}`;
+}
+
 /* ============ NAV ============ */
 const pages = {
   dashboard:renderDashboard, alunos:renderAlunos, pagamentos:renderPagamentos,
   turmas:renderTurmas, comunicados:renderComunicados, financeiro:renderFinanceiro,
   automacao:renderAutomacao, relatorios:renderRelatorios, notas:renderNotas,
-  frequencia:renderFrequencia, tarefas:renderTarefas, portfolio:renderPortfolio
+  frequencia:renderFrequencia, tarefas:renderTarefas, portfolio:renderPortfolio,
+  matriculas:renderMatriculas
 };
 const titles = {
   dashboard:'Dashboard',alunos:'Alunos',pagamentos:'Pagamentos',
   turmas:'Turmas',comunicados:'Comunicados',financeiro:'Financeiro',
   automacao:'Automação WhatsApp',relatorios:'Relatórios',notas:'Desempenho',
-  frequencia:'Frequência',tarefas:'Tarefas',portfolio:'Portfólio de Provas e Trabalhos'
+  frequencia:'Frequência',tarefas:'Tarefas',portfolio:'Portfólio de Provas e Trabalhos',
+  matriculas:'Matrículas e Documentos'
 };
 function go(page){
   document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.toggle('active',l.dataset.page===page));
@@ -341,19 +416,25 @@ function renderDashboard(){
   const tarefasAtivas = DB.tarefas.all().filter(t=>t.status==='ativa');
   const tarefasVencidas = tarefasAtivas.filter(t=>new Date(t.prazo)<hoje);
   const baixaFreq = ativos.filter(a=>calcularFrequencia(a.id).percentual<75);
+  
+  const matriculasPendentes = DB.matriculas.all().filter(m => {
+    if (m.status !== 'ativa') return false;
+    const s = getDocsStatus(m.id);
+    return !s.completo;
+  }).length;
 
   const html = `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       ${statCard('Total de Alunos', alunos.length, 'users', 'gradient-brand', 'text-white')}
       ${statCard('Ativos', ativos.length, 'user-check', 'gradient-mint', 'text-white')}
       ${statCard('Inativos', inativos.length, 'user-x', 'gradient-peach', 'text-white')}
-      ${statCard('Venc. próximos', vencProx.length, 'clock', 'gradient-sun', 'text-white')}
+      ${statCard('Docs Pendentes', matriculasPendentes, 'file-warning', 'gradient-sun', 'text-white')}
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       ${statCard('Média Geral', mediaGeral.toFixed(1), 'target', 'gradient-lav', 'text-white')}
       ${statCard('Frequência Média', freqMedia.toFixed(0)+'%', 'calendar-check', 'gradient-mint', 'text-white')}
-      ${statCard('Tarefas Ativas', tarefasAtivas.length, 'list-checks', 'gradient-brand', 'text-white')}
-      ${statCard('Tarefas Vencidas', tarefasVencidas.length, 'alert-circle', 'gradient-peach', 'text-white')}
+      ${statCard('Previsto', fmtBRL(previsto), 'trending-up', 'gradient-brand', 'text-white')}
+      ${statCard('Recebido', fmtBRL(recebido), 'check-circle', 'gradient-peach', 'text-white')}
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
@@ -372,39 +453,6 @@ function renderDashboard(){
             </div>
             <span class="badge bg-amber-200 text-amber-900">Dia ${a.vencimentoDia||10}</span>
           </div>`).join('') || '<p class="text-sm text-slate-500">Nenhum vencimento próximo.</p>'}
-        </div>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">📋 Tarefas pendentes</h3>
-        <div class="space-y-2">
-          ${tarefasAtivas.slice(0,5).map(t=>{
-            const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
-            const vencida = new Date(t.prazo)<hoje;
-            return `<div class="flex items-center justify-between p-3 rounded-xl ${vencida?'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800':'bg-slate-50 dark:bg-slate-700/40'}">
-              <div>
-                <p class="font-semibold text-sm">${t.titulo}</p>
-                <p class="text-xs text-slate-500">${turma?turma.nome:''} • Prazo: ${fmtDate(t.prazo)}</p>
-              </div>
-              ${vencida?'<span class="badge bg-red-200 text-red-900">Vencida</span>':'<span class="badge bg-brand-100 text-brand-700">Ativa</span>'}
-            </div>`;
-          }).join('') || '<p class="text-sm text-slate-500">Nenhuma tarefa ativa.</p>'}
-        </div>
-      </div>
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">⚠️ Baixa frequência</h3>
-        <div class="space-y-2">
-          ${baixaFreq.map(a=>{
-            const freq = calcularFrequencia(a.id);
-            return `<div class="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <div>
-                <p class="font-semibold text-sm">${a.nome}</p>
-                <p class="text-xs text-slate-500">${freq.faltas} faltas • ${freq.justificadas} justificadas</p>
-              </div>
-              <span class="badge bg-red-200 text-red-900">${freq.percentual.toFixed(0)}%</span>
-            </div>`;
-          }).join('') || '<p class="text-sm text-slate-500">Todos com frequência adequada.</p>'}
         </div>
       </div>
     </div>
@@ -431,6 +479,319 @@ function statCard(label,val,icon,grad,text){
     <div class="flex items-center justify-between mb-3"><span class="text-sm opacity-90">${label}</span><i data-lucide="${icon}" class="w-5 h-5"></i></div>
     <p class="text-3xl font-bold">${val}</p>
   </div>`;
+}
+
+/* ============ MATRÍCULAS ============ */
+let chartMatriculas;
+function renderMatriculas(){
+  const matriculas = DB.matriculas.all();
+  const ativas = matriculas.filter(m => m.status === 'ativa');
+  const pendentes = ativas.filter(m => !getDocsStatus(m.id).completo);
+  const ano = new Date().getFullYear();
+  const rematriculas = matriculas.filter(m => m.dataMatricula && new Date(m.dataMatricula).getFullYear() === ano).length;
+
+  const porMes = [];
+  for(let i=5;i>=0;i--){
+    const d = new Date(); d.setMonth(d.getMonth()-i);
+    const count = matriculas.filter(m => {
+      const dm = new Date(m.dataMatricula);
+      return dm.getMonth() === d.getMonth() && dm.getFullYear() === d.getFullYear();
+    }).length;
+    porMes.push({label: d.toLocaleDateString('pt-BR',{month:'short'}), count});
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      ${statCard('Matrículas Ativas', ativas.length, 'file-check', 'gradient-mint', 'text-white')}
+      ${statCard('Docs Pendentes', pendentes.length, 'file-warning', 'gradient-peach', 'text-white')}
+      ${statCard('Matrículas no Ano', rematriculas, 'file-badge', 'gradient-brand', 'text-white')}
+      ${statCard('Total de Matrículas', matriculas.length, 'folder', 'gradient-lav', 'text-white')}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-4">Matrículas nos últimos 6 meses</h3>
+        <canvas id="chartMatriculas" height="110"></canvas>
+      </div>
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-4">⚠️ Documentos pendentes</h3>
+        <div class="space-y-2 max-h-64 overflow-y-auto">
+          ${pendentes.slice(0,6).map(m => {
+            const a = DB.alunos.all().find(x => x.id === m.alunoId);
+            const s = getDocsStatus(m.id);
+            return `<div class="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 cursor-pointer" onclick="verMatricula('${m.id}')">
+              <div>
+                <p class="font-semibold text-sm">${a?a.nome:'—'}</p>
+                <p class="text-xs text-slate-500">Nº ${m.numero}</p>
+              </div>
+              <span class="badge bg-amber-200 text-amber-900">${s.pendentes} pend.</span>
+            </div>`;
+          }).join('') || '<p class="text-sm text-slate-500">Todas as matrículas estão com documentos completos!</p>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold">Todas as Matrículas</h3>
+        <button onclick="formMatricula()" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold flex items-center gap-2 shadow-lg shadow-brand-500/30">
+          <i data-lucide="plus" class="w-4 h-4"></i> Nova matrícula
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 dark:bg-slate-700/50 text-left">
+            <tr>
+              <th class="p-3">Nº</th>
+              <th class="p-3">Aluno</th>
+              <th class="p-3">Período</th>
+              <th class="p-3">Data</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Documentos</th>
+              <th class="p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${matriculas.sort((a,b) => new Date(b.dataMatricula) - new Date(a.dataMatricula)).map(m => {
+              const a = DB.alunos.all().find(x => x.id === m.alunoId);
+              const s = getDocsStatus(m.id);
+              const statusColor = m.status==='ativa'?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300':
+                                  m.status==='pendente'?'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300':
+                                  'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+              return `<tr class="border-t border-slate-200 dark:border-slate-700">
+                <td class="p-3 font-mono font-bold text-brand-600">${m.numero}</td>
+                <td class="p-3 font-semibold">${a?a.nome:'—'}</td>
+                <td class="p-3">${m.periodoLetivo}</td>
+                <td class="p-3 text-slate-500">${fmtDate(m.dataMatricula)}</td>
+                <td class="p-3"><span class="badge ${statusColor}">${m.status}</span></td>
+                <td class="p-3">
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-2 max-w-20"><div class="h-2 rounded-full ${s.completo?'bg-emerald-500':'bg-amber-500'}" style="width:${(s.entregues/s.total)*100}%"></div></div>
+                    <span class="text-xs font-semibold">${s.entregues}/${s.total}</span>
+                  </div>
+                </td>
+                <td class="p-3 text-right"><button onclick="verMatricula('${m.id}')" class="text-brand-600 hover:underline text-xs font-semibold">Ver</button></td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="7" class="p-6 text-center text-slate-500">Nenhuma matrícula registrada.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const ctx = document.getElementById('chartMatriculas').getContext('2d');
+  if(chartMatriculas) chartMatriculas.destroy();
+  chartMatriculas = new Chart(ctx,{
+    type:'line',
+    data:{labels:porMes.map(p=>p.label),datasets:[{label:'Matrículas',data:porMes.map(p=>p.count),borderColor:'#3f6bff',backgroundColor:'rgba(63,107,255,.15)',fill:true,tension:.35}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}
+  });
+}
+
+function formMatricula(editId, alunoIdPreSelecionado){
+  const alunos = DB.alunos.all();
+  const mat = editId ? DB.matriculas.all().find(x => x.id === editId) : {
+    numero: gerarNumeroMatricula(),
+    periodoLetivo: `${new Date().getFullYear()}/1`,
+    status: 'pendente',
+    dataMatricula: new Date().toISOString(),
+    escolaRegular:'', serieAno:'', motivoReforco:'', endereco:'', observacoes:''
+  };
+
+  openModal(editId?'Editar matrícula':'Nova matrícula', `
+    <form id="formMat" class="space-y-4">
+      <div class="p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 flex items-center justify-between">
+        <div>
+          <p class="text-xs text-slate-500">Número da matrícula</p>
+          <p class="font-mono font-bold text-brand-700 dark:text-brand-300 text-lg">${mat.numero}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-slate-500">Status</p>
+          <select name="status" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+            <option value="pendente" ${mat.status==='pendente'?'selected':''}>Pendente</option>
+            <option value="ativa" ${mat.status==='ativa'?'selected':''}>Ativa</option>
+            <option value="encerrada" ${mat.status==='encerrada'?'selected':''}>Encerrada</option>
+            <option value="transferida" ${mat.status==='transferida'?'selected':''}>Transferida</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="text-xs font-semibold">Aluno</label>
+        <select name="alunoId" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">Selecione...</option>
+          ${alunos.map(a=>`<option value="${a.id}" ${a.id===(editId?mat.alunoId:alunoIdPreSelecionado)?'selected':''}>${a.nome}</option>`).join('')}
+        </select></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Período letivo</label>
+          <input name="periodoLetivo" required value="${mat.periodoLetivo||''}" placeholder="Ex: 2024/1" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Data da matrícula</label>
+          <input type="date" name="dataMatricula" value="${mat.dataMatricula?mat.dataMatricula.split('T')[0]:''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Escola regular</label>
+          <input name="escolaRegular" value="${mat.escolaRegular||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Série/Ano</label>
+          <input name="serieAno" value="${mat.serieAno||''}" placeholder="Ex: 6º ano" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      </div>
+      <div><label class="text-xs font-semibold">Motivo do reforço</label>
+        <select name="motivoReforco" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">Selecione...</option>
+          <option ${mat.motivoReforco==='Dificuldade'?'selected':''}>Dificuldade</option>
+          <option ${mat.motivoReforco==='Melhoria de notas'?'selected':''}>Melhoria de notas</option>
+          <option ${mat.motivoReforco==='Preparação para prova'?'selected':''}>Preparação para prova</option>
+          <option ${mat.motivoReforco==='Reforço geral'?'selected':''}>Reforço geral</option>
+          <option ${mat.motivoReforco==='Outro'?'selected':''}>Outro</option>
+        </select></div>
+      <div><label class="text-xs font-semibold">Endereço</label>
+        <input name="endereco" value="${mat.endereco||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+      <div><label class="text-xs font-semibold">Observações</label>
+        <textarea name="observacoes" rows="3" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">${mat.observacoes||''}</textarea></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('formMat').addEventListener('submit',e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    const lista = DB.matriculas.all();
+    if(editId){
+      const i = lista.findIndex(x => x.id === editId);
+      lista[i] = {...lista[i], ...data};
+    } else {
+      data.id = id();
+      data.numero = mat.numero;
+      lista.push(data);
+    }
+    DB.matriculas.save(lista);
+    closeModal(); toast('Matrícula salva!'); renderMatriculas();
+  });
+}
+
+function verMatricula(matId){
+  const mat = DB.matriculas.all().find(m => m.id === matId);
+  if(!mat) return;
+  const aluno = DB.alunos.all().find(a => a.id === mat.alunoId);
+  const docs = getDocumentosMatricula(matId);
+  const status = getDocsStatus(matId);
+
+  openModal(`Matrícula ${mat.numero}`, `
+    <div class="space-y-4">
+      <div class="p-4 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div><p class="text-xs text-slate-500">Aluno</p><p class="font-bold">${aluno?aluno.nome:'—'}</p></div>
+          <div><p class="text-xs text-slate-500">Período</p><p class="font-bold">${mat.periodoLetivo}</p></div>
+          <div><p class="text-xs text-slate-500">Data</p><p class="font-bold">${fmtDate(mat.dataMatricula)}</p></div>
+          <div><p class="text-xs text-slate-500">Status</p><p class="font-bold capitalize">${mat.status}</p></div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mt-3 pt-3 border-t border-brand-200 dark:border-brand-800">
+          <div><p class="text-xs text-slate-500">Escola regular</p><p class="font-semibold">${mat.escolaRegular||'—'}</p></div>
+          <div><p class="text-xs text-slate-500">Série/Ano</p><p class="font-semibold">${mat.serieAno||'—'}</p></div>
+          <div><p class="text-xs text-slate-500">Motivo</p><p class="font-semibold">${mat.motivoReforco||'—'}</p></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="font-bold">Documentos (${status.entregues}/${status.total})</h4>
+          ${status.completo?'<span class="badge bg-emerald-100 text-emerald-700">Completo</span>':'<span class="badge bg-amber-100 text-amber-700">Pendentes</span>'}
+        </div>
+        <div class="space-y-2">
+          ${TIPOS_DOCUMENTOS.map(tipo => {
+            const doc = docs.find(d => d.tipo === tipo.key);
+            const entregue = !!doc;
+            return `<div class="flex items-center justify-between p-3 rounded-xl ${entregue?'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800':'bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700'}">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg ${entregue?'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-slate-200 text-slate-500 dark:bg-slate-700'} flex items-center justify-center">
+                  <i data-lucide="${tipo.icone}" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <p class="font-semibold text-sm">${tipo.label}</p>
+                  <p class="text-xs text-slate-500">${entregue?'Entregue em '+fmtDate(doc.dataUpload):'Pendente'}</p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                ${entregue && doc.fileData ? `<button onclick="downloadDoc('${doc.id}')" class="px-3 py-1.5 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-xs font-semibold flex items-center gap-1"><i data-lucide="download" class="w-3 h-3"></i> Baixar</button>`:''}
+                <button onclick="uploadDoc('${matId}','${tipo.key}')" class="px-3 py-1.5 rounded-lg ${entregue?'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300':'gradient-brand text-white'} text-xs font-semibold flex items-center gap-1">
+                  <i data-lucide="${entregue?'refresh':'upload'}" class="w-3 h-3"></i> ${entregue?'Trocar':'Upload'}
+                </button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button onclick="formMatricula('${matId}')" class="px-4 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold text-sm">Editar</button>
+        <button onclick="closeModal()" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 font-semibold text-sm">Fechar</button>
+      </div>
+    </div>
+  `);
+}
+
+function uploadDoc(matId, tipoKey){
+  const mat = DB.matriculas.all().find(m => m.id === matId);
+  if(!mat) return;
+  const aluno = DB.alunos.all().find(a => a.id === mat.alunoId);
+  
+  openModal(`Upload: ${TIPOS_DOCUMENTOS.find(t=>t.key===tipoKey).label}`, `
+    <p class="text-sm text-slate-500 mb-3">Aluno: <b>${aluno?aluno.nome:'—'}</b></p>
+    <form id="formDoc" class="space-y-4">
+      <div>
+        <label class="text-xs font-semibold">Arquivo (PDF ou Imagem - máx 2MB)</label>
+        <input type="file" id="fileDoc" accept=".pdf,image/*" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 dark:file:bg-brand-900/40 dark:file:text-brand-300"/>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
+      </div>
+    </form>
+  `);
+  
+  document.getElementById('formDoc').addEventListener('submit',e=>{
+    e.preventDefault();
+    const fileInput = document.getElementById('fileDoc');
+    const file = fileInput.files[0];
+    if(file.size > 2 * 1024 * 1024) return toast('Arquivo muito grande! Máximo 2MB.','error');
+    
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const docs = DB.documentos.all();
+      const existente = docs.find(d => d.matriculaId === matId && d.tipo === tipoKey);
+      const data = {
+        id: existente ? existente.id : id(),
+        matriculaId: matId,
+        alunoId: mat.alunoId,
+        tipo: tipoKey,
+        nomeArquivo: file.name,
+        fileType: file.type,
+        fileData: evt.target.result,
+        status: 'entregue',
+        dataUpload: new Date().toISOString()
+      };
+      if(existente){
+        const i = docs.findIndex(d => d.id === existente.id);
+        docs[i] = data;
+      } else {
+        docs.push(data);
+      }
+      DB.documentos.save(docs);
+      closeModal(); toast('Documento salvo!'); verMatricula(matId);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadDoc(docId){
+  const doc = DB.documentos.all().find(d => d.id === docId);
+  if(!doc || !doc.fileData) return toast('Documento não encontrado','error');
+  const link = document.createElement('a');
+  link.href = doc.fileData;
+  link.download = doc.nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 /* ============ ALUNOS ============ */
@@ -473,6 +834,14 @@ function drawAlunos(){
     const freq = calcularFrequencia(a.id);
     const tarefas = getTarefasAluno(a.id);
     const portfolioCount = DB.portfolios.all().filter(p=>p.alunoId===a.id).length;
+    
+    const mat = getMatricula(a.id);
+    let badgeDoc = '';
+    if(mat && mat.status === 'ativa'){
+      const s = getDocsStatus(mat.id);
+      if(!s.completo) badgeDoc = `<span class="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Docs pendentes</span>`;
+    }
+    
     return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex items-start justify-between mb-3">
         <div class="flex items-center gap-3">
@@ -507,6 +876,7 @@ function drawAlunos(){
           <p class="font-bold text-purple-600">${portfolioCount}</p>
         </div>
       </div>
+      ${badgeDoc?`<div class="mt-3">${badgeDoc}</div>`:''}
       <div class="flex gap-2 mt-4">
         <button onclick="verAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-semibold">Ver</button>
         <button onclick="formAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 hover:bg-brand-200 text-sm font-semibold">Editar</button>
@@ -588,11 +958,15 @@ function verAluno(id){
   const freq = calcularFrequencia(id);
   const tarefas = getTarefasAluno(id);
   const portfolio = DB.portfolios.all().filter(p=>p.alunoId===id).sort((a,b)=>new Date(b.data)-new Date(a.data));
+  const mat = getMatricula(id);
+  const docs = mat ? getDocumentosMatricula(mat.id) : [];
+  const docStatus = mat ? getDocsStatus(mat.id) : null;
 
   openModal(a.nome, `
     <div class="space-y-4">
       <div class="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700">
         <button class="tab-btn active px-4 py-2 rounded-t-lg font-semibold text-sm" onclick="switchTab(this,'tabInfo')">Informações</button>
+        <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabMatricula')">Matrícula</button>
         <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabNotas')">Boletim</button>
         <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabFreq')">Frequência</button>
         <button class="tab-btn px-4 py-2 rounded-t-lg font-semibold text-sm bg-slate-100 dark:bg-slate-700" onclick="switchTab(this,'tabTarefas')">Tarefas</button>
@@ -612,6 +986,64 @@ function verAluno(id){
           <p class="text-sm"><b>Nascimento:</b> ${fmtDate(a.nascimento)}</p>
           <p class="text-sm"><b>Cadastrado em:</b> ${fmtDate(a.dataCadastro)}</p>
         </div>
+      </div>
+      <div id="tabMatricula" class="hidden">
+        ${mat ? `
+          <div class="p-4 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 mb-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs text-slate-500">Nº Matrícula</p>
+                <p class="font-mono font-bold text-brand-700 dark:text-brand-300 text-xl">${mat.numero}</p>
+              </div>
+              <span class="badge ${mat.status==='ativa'?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-600'}">${mat.status}</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              <div><p class="text-xs text-slate-500">Período</p><p class="font-semibold">${mat.periodoLetivo}</p></div>
+              <div><p class="text-xs text-slate-500">Data</p><p class="font-semibold">${fmtDate(mat.dataMatricula)}</p></div>
+              <div><p class="text-xs text-slate-500">Escola regular</p><p class="font-semibold">${mat.escolaRegular||'—'}</p></div>
+              <div><p class="text-xs text-slate-500">Série/Ano</p><p class="font-semibold">${mat.serieAno||'—'}</p></div>
+              <div><p class="text-xs text-slate-500">Motivo</p><p class="font-semibold">${mat.motivoReforco||'—'}</p></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-bold">Documentos (${docStatus.entregues}/${docStatus.total})</h4>
+              ${docStatus.completo?'<span class="badge bg-emerald-100 text-emerald-700">Completo</span>':'<span class="badge bg-amber-100 text-amber-700">Pendentes</span>'}
+            </div>
+            <div class="space-y-2">
+              ${TIPOS_DOCUMENTOS.map(tipo => {
+                const doc = docs.find(d => d.tipo === tipo.key);
+                const entregue = !!doc;
+                return `<div class="flex items-center justify-between p-3 rounded-xl ${entregue?'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800':'bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700'}">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg ${entregue?'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-slate-200 text-slate-500 dark:bg-slate-700'} flex items-center justify-center">
+                      <i data-lucide="${tipo.icone}" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-sm">${tipo.label}</p>
+                      <p class="text-xs text-slate-500">${entregue?'Entregue em '+fmtDate(doc.dataUpload):'Pendente'}</p>
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    ${entregue && doc.fileData ? `<button onclick="downloadDoc('${doc.id}')" class="px-3 py-1.5 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-xs font-semibold flex items-center gap-1"><i data-lucide="download" class="w-3 h-3"></i> Baixar</button>`:''}
+                    <button onclick="uploadDoc('${mat.id}','${tipo.key}')" class="px-3 py-1.5 rounded-lg ${entregue?'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300':'gradient-brand text-white'} text-xs font-semibold flex items-center gap-1">
+                      <i data-lucide="${entregue?'refresh':'upload'}" class="w-3 h-3"></i> ${entregue?'Trocar':'Upload'}
+                    </button>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="flex gap-2 pt-3">
+            <button onclick="formMatricula('${mat.id}')" class="flex-1 px-3 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold text-sm">Editar matrícula</button>
+          </div>
+        ` : `
+          <div class="text-center py-8">
+            <i data-lucide="file-badge" class="w-12 h-12 mx-auto text-slate-400 mb-3"></i>
+            <p class="text-slate-500 mb-4">Nenhuma matrícula registrada para este aluno.</p>
+            <button onclick="formMatricula(null,'${id}')" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Criar matrícula</button>
+          </div>
+        `}
       </div>
       <div id="tabNotas" class="hidden">
         <div class="flex items-center justify-between mb-3">
@@ -728,7 +1160,7 @@ function switchTab(btn,tabId){
   btn.parentElement.querySelectorAll('.tab-btn').forEach(b=>{b.classList.remove('active');b.classList.add('bg-slate-100','dark:bg-slate-700');});
   btn.classList.add('active'); btn.classList.remove('bg-slate-100','dark:bg-slate-700');
   const modal = document.getElementById('modalBody');
-  ['tabInfo','tabNotas','tabFreq','tabTarefas','tabPortfolio','tabPags'].forEach(t=>{
+  ['tabInfo','tabMatricula','tabNotas','tabFreq','tabTarefas','tabPortfolio','tabPags'].forEach(t=>{
     const el = modal.querySelector('#'+t);
     if(el) el.classList.toggle('hidden', t!==tabId);
   });
@@ -742,9 +1174,6 @@ function delAluno(id){
 /* ============ PORTFÓLIO ============ */
 function renderPortfolio(){
   const portfolios = DB.portfolios.all();
-  const alunos = DB.alunos.all();
-  const turmas = DB.turmas.all();
-  
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       ${statCard('Total de Documentos', portfolios.length, 'folder-open', 'gradient-brand', 'text-white')}
@@ -752,7 +1181,6 @@ function renderPortfolio(){
       ${statCard('Trabalhos', portfolios.filter(p=>p.tipo==='Trabalho').length, 'book-open', 'gradient-lav', 'text-white')}
       ${statCard('Atividades', portfolios.filter(p=>p.tipo==='Atividade').length, 'check-square', 'gradient-sun', 'text-white')}
     </div>
-
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
       <div class="flex-1 flex flex-wrap items-center gap-2">
         <div class="relative flex-1 max-w-md">
@@ -770,7 +1198,6 @@ function renderPortfolio(){
         <i data-lucide="upload" class="w-4 h-4"></i> Novo upload
       </button>
     </div>
-
     <div id="listaPortfolio" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
   `;
   drawPortfolio();
@@ -782,22 +1209,18 @@ function drawPortfolio(){
   const q = (document.getElementById('buscaPortfolio')?.value||'').toLowerCase();
   const f = document.getElementById('filtroTipo')?.value||'';
   let lista = DB.portfolios.all().sort((a,b)=>new Date(b.data)-new Date(a.data));
-  
   if(q) {
     const alunosMatch = DB.alunos.all().filter(a=>a.nome.toLowerCase().includes(q)).map(a=>a.id);
     lista = lista.filter(p=>alunosMatch.includes(p.alunoId));
   }
   if(f) lista = lista.filter(p=>p.tipo===f);
-
   const el = document.getElementById('listaPortfolio');
   if(!lista.length){ el.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500">Nenhum documento encontrado.</div>`; return; }
-  
   el.innerHTML = lista.map(p=>{
     const a = DB.alunos.all().find(x=>x.id===p.alunoId);
     const t = a ? DB.turmas.all().find(x=>x.id===a.turmaId) : null;
     const isImg = p.fileType && p.fileType.startsWith('image/');
     const tipoColor = p.tipo==='Prova'?'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300':p.tipo==='Trabalho'?'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300':'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-    
     return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex items-start gap-4 mb-4">
         <div class="w-14 h-14 rounded-xl ${isImg?'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300':'bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300'} flex items-center justify-center flex-shrink-0">
@@ -828,7 +1251,6 @@ function drawPortfolio(){
 function uploadPortfolio(alunoIdFixo){
   const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
   const turmas = DB.turmas.all();
-  
   openModal('Upload de Documento', `
     <form id="formPort" class="space-y-4">
       <div><label class="text-xs font-semibold">Aluno</label>
@@ -850,10 +1272,8 @@ function uploadPortfolio(alunoIdFixo){
         <input type="date" name="data" value="${new Date().toISOString().split('T')[0]}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
       <div>
         <label class="text-xs font-semibold">Arquivo (PDF ou Imagem - máx 2MB)</label>
-        <div class="mt-1 flex items-center gap-2">
-          <input type="file" id="fileInput" accept=".pdf,image/*" required class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 dark:file:bg-brand-900/40 dark:file:text-brand-300"/>
-        </div>
-        <p class="text-xs text-amber-600 mt-1"><i data-lucide="info" class="w-3 h-3 inline"></i> Arquivos grandes podem estourar o limite do navegador. Em produção, usaremos Firebase Storage.</p>
+        <input type="file" id="fileInput" accept=".pdf,image/*" required class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 dark:file:bg-brand-900/40 dark:file:text-brand-300"/>
+        <p class="text-xs text-amber-600 mt-1"><i data-lucide="info" class="w-3 h-3 inline"></i> Em produção, usaremos Firebase Storage para arquivos ilimitados.</p>
       </div>
       <div class="flex justify-end gap-2">
         <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
@@ -861,16 +1281,11 @@ function uploadPortfolio(alunoIdFixo){
       </div>
     </form>
   `);
-  
   document.getElementById('formPort').addEventListener('submit',e=>{
     e.preventDefault();
     const fileInput = document.getElementById('fileInput');
     const file = fileInput.files[0];
-    
-    if(file.size > 2 * 1024 * 1024) {
-      return toast('Arquivo muito grande! Máximo 2MB.','error');
-    }
-
+    if(file.size > 2 * 1024 * 1024) return toast('Arquivo muito grande! Máximo 2MB.','error');
     const reader = new FileReader();
     reader.onload = function(evt) {
       const fd = new FormData(e.target);
@@ -878,17 +1293,13 @@ function uploadPortfolio(alunoIdFixo){
       data.id = id();
       data.fileName = file.name;
       data.fileType = file.type;
-      data.fileData = evt.target.result; // Base64
+      data.fileData = evt.target.result;
       data.data = data.data || new Date().toISOString();
-      
       const lista = DB.portfolios.all();
       lista.push(data);
       DB.portfolios.save(lista);
-      closeModal(); 
-      toast('Documento salvo no portfólio!'); 
-      
-      // Atualiza a tela correta
-      if(alunoIdFixo) { verAluno(alunoIdFixo); setTimeout(()=>switchTab(document.querySelector('[onclick*="tabPortfolio"]'),'tabPortfolio'), 100); }
+      closeModal(); toast('Documento salvo no portfólio!');
+      if(alunoIdFixo) { verAluno(alunoIdFixo); setTimeout(()=>{const btn=document.querySelector('[onclick*="tabPortfolio"]');if(btn)switchTab(btn,'tabPortfolio');},100); }
       else { renderPortfolio(); }
     };
     reader.readAsDataURL(file);
@@ -909,20 +1320,8 @@ function downloadFile(pid){
 function delPortfolio(pid){
   if(!confirm('Excluir este documento?')) return;
   DB.portfolios.save(DB.portfolios.all().filter(p=>p.id!==pid));
-  toast('Documento excluído'); 
-  // Tenta detectar onde estamos
+  toast('Documento excluído');
   if(document.getElementById('listaPortfolio')) renderPortfolio();
-  else {
-    // Estamos no modal do aluno, recarrega a aba
-    const modalBody = document.getElementById('modalBody');
-    const activeTab = modalBody.querySelector('.tab-btn.active');
-    if(activeTab) {
-      const alunoId = activeTab.closest('.space-y-4').querySelector('h3')?.textContent; // Hacky, melhor passar o ID
-      // Vamos apenas recarregar o modal se soubermos o ID. 
-      // Para simplificar, vamos apenas remover o elemento visualmente e avisar
-      toast('Documento excluído. Recarregue a aba.');
-    }
-  }
 }
 
 /* ============ NOTAS/DESEMPENHO ============ */
@@ -931,14 +1330,12 @@ function renderNotas(){
   const turmas = DB.turmas.all();
   const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
   const notas = DB.notas.all();
-
   const mediaPorTurma = turmas.map(t=>{
     const alunosTurma = alunos.filter(a=>a.turmaId===t.id);
     const notasTurma = notas.filter(n=>alunosTurma.some(a=>a.id===n.alunoId));
     const media = notasTurma.length ? notasTurma.reduce((s,n)=>s+n.nota,0)/notasTurma.length : 0;
     return {turma:t.nome,media};
   });
-
   const desempenhoAlunos = alunos.map(a=>{
     const notasA = notas.filter(n=>n.alunoId===a.id);
     const media = notasA.length ? notasA.reduce((s,n)=>s+n.nota,0)/notasA.length : 0;
@@ -953,7 +1350,6 @@ function renderNotas(){
       ${statCard('Alunos em risco', baixos.length, 'alert-triangle', 'gradient-peach', 'text-white')}
       ${statCard('Aprovados (>6)', desempenhoAlunos.filter(a=>a.media>=6).length, 'check-circle', 'gradient-lav', 'text-white')}
     </div>
-
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-4">Média por Turma</h3>
@@ -972,7 +1368,6 @@ function renderNotas(){
         </div>
       </div>
     </div>
-
     <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <h3 class="font-bold">Lançamento de Notas</h3>
@@ -1008,7 +1403,6 @@ function renderNotas(){
       </div>
     </div>
   `;
-
   const ctx = document.getElementById('chartNotas').getContext('2d');
   if(chartNotas) chartNotas.destroy();
   chartNotas = new Chart(ctx,{
@@ -1199,31 +1593,21 @@ function gerarBoletimPDF(alunoId){
   const medias = calcularMedias(alunoId);
   const disciplinas = Object.keys(medias);
   const mediaGeral = disciplinas.length ? disciplinas.reduce((s,d)=>s+medias[d].media,0)/disciplinas.length : 0;
-
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setFontSize(18); doc.text('Boletim Escolar',14,20);
   doc.setFontSize(10); doc.text('EduGestão — Reforço Escolar',14,28);
   doc.setDrawColor(63,107,255); doc.setLineWidth(1); doc.line(14,32,196,32);
-
   doc.setFontSize(11);
   doc.text(`Aluno: ${a.nome}`,14,42);
   doc.text(`Turma: ${t?t.nome:'—'}`,14,50);
   doc.text(`Responsável: ${a.responsavel}`,14,58);
   doc.text(`Média Geral: ${mediaGeral.toFixed(1)}`,140,42);
-
   const body = disciplinas.map(d=>{
     const m = medias[d];
     return [d, m[1]?m[1].toFixed(1):'—', m[2]?m[2].toFixed(1):'—', m[3]?m[3].toFixed(1):'—', m.media.toFixed(1), m.media>=6?'Aprovado':'Reprovado'];
   });
-  doc.autoTable({
-    startY:65,
-    head:[['Disciplina','1º Trim','2º Trim','3º Trim','Média','Situação']],
-    body,
-    styles:{fontSize:9},
-    headStyles:{fillColor:[63,107,255]}
-  });
-
+  doc.autoTable({startY:65,head:[['Disciplina','1º Trim','2º Trim','3º Trim','Média','Situação']],body,styles:{fontSize:9},headStyles:{fillColor:[63,107,255]}});
   doc.save(`boletim-${a.nome.replace(/\s/g,'_')}.pdf`);
   toast('Boletim gerado!');
 }
@@ -1234,7 +1618,6 @@ function renderFrequencia(){
   const turmas = DB.turmas.all();
   const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
   const freqs = DB.frequencias.all();
-
   const freqPorTurma = turmas.map(t=>{
     const alunosT = alunos.filter(a=>a.turmaId===t.id);
     const freqsT = freqs.filter(f=>alunosT.some(a=>a.id===f.alunoId));
@@ -1243,9 +1626,7 @@ function renderFrequencia(){
     const pct = total ? (presentes/total)*100 : 100;
     return {turma:t.nome,percentual:pct};
   });
-
-  const baixaFreq = alunos.map(a=>({aluno:a.nome,percentual:calcularFrequencia(a.id).percentual,turma:DB.turmas.all().find(t=>t.id===a.turmaId)?.nome||''}))
-    .filter(a=>a.percentual<75).sort((a,b)=>a.percentual-b.percentual);
+  const baixaFreq = alunos.map(a=>({aluno:a.nome,percentual:calcularFrequencia(a.id).percentual,turma:DB.turmas.all().find(t=>t.id===a.turmaId)?.nome||''})).filter(a=>a.percentual<75).sort((a,b)=>a.percentual-b.percentual);
 
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -1254,7 +1635,6 @@ function renderFrequencia(){
       ${statCard('Baixa Frequência', baixaFreq.length, 'alert-triangle', 'gradient-peach', 'text-white')}
       ${statCard('Adequada (≥75%)', alunos.filter(a=>calcularFrequencia(a.id).percentual>=75).length, 'check-circle', 'gradient-lav', 'text-white')}
     </div>
-
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold mb-4">Frequência por Turma</h3>
@@ -1273,7 +1653,6 @@ function renderFrequencia(){
         </div>
       </div>
     </div>
-
     <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <h3 class="font-bold">Registro de Frequência</h3>
@@ -1305,14 +1684,9 @@ function renderFrequencia(){
       </div>
     </div>
   `;
-
   const ctx = document.getElementById('chartFreq').getContext('2d');
   if(chartFreq) chartFreq.destroy();
-  chartFreq = new Chart(ctx,{
-    type:'bar',
-    data:{labels:freqPorTurma.map(f=>f.turma),datasets:[{label:'Frequência %',data:freqPorTurma.map(f=>f.percentual),backgroundColor:'#3f6bff',borderRadius:8}]},
-    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}
-  });
+  chartFreq = new Chart(ctx,{type:'bar',data:{labels:freqPorTurma.map(f=>f.turma),datasets:[{label:'Frequência %',data:freqPorTurma.map(f=>f.percentual),backgroundColor:'#3f6bff',borderRadius:8}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}});
 }
 
 function formFrequencia(){
@@ -1345,8 +1719,7 @@ function formFrequencia(){
     data.id = id();
     const lista = DB.frequencias.all();
     const existe = lista.find(f=>f.alunoId===data.alunoId && f.data===data.data);
-    if(existe){ existe.status = data.status; }
-    else { lista.push(data); }
+    if(existe){ existe.status = data.status; } else { lista.push(data); }
     DB.frequencias.save(lista);
     closeModal(); toast('Frequência registrada!'); renderFrequencia();
   });
@@ -1408,8 +1781,7 @@ function chamadaTurma(){
       const aid = sel.dataset.aluno;
       const status = sel.value;
       const existe = lista.find(f=>f.alunoId===aid && f.data===data);
-      if(existe){ existe.status = status; }
-      else { lista.push({id:id(),alunoId:aid,data,status}); }
+      if(existe){ existe.status = status; } else { lista.push({id:id(),alunoId:aid,data,status}); }
       count++;
     });
     DB.frequencias.save(lista);
@@ -1456,8 +1828,7 @@ function chamadaHoje(){
       const aid = sel.dataset.aluno;
       const status = sel.value;
       const existe = lista.find(f=>f.alunoId===aid && f.data===hoje);
-      if(existe){ existe.status = status; }
-      else { lista.push({id:id(),alunoId:aid,data:hoje,status}); }
+      if(existe){ existe.status = status; } else { lista.push({id:id(),alunoId:aid,data:hoje,status}); }
       count++;
     });
     DB.frequencias.save(lista);
@@ -1478,7 +1849,6 @@ function renderTarefas(){
   const ativas = tarefas.filter(t=>t.status==='ativa');
   const vencidas = ativas.filter(t=>new Date(t.prazo)<hoje);
   const pendentes = ativas.filter(t=>new Date(t.prazo)>=hoje);
-
   document.getElementById('content').innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       ${statCard('Tarefas Ativas', ativas.length, 'list-checks', 'gradient-brand', 'text-white')}
@@ -1486,7 +1856,6 @@ function renderTarefas(){
       ${statCard('Vencidas', vencidas.length, 'alert-circle', 'gradient-peach', 'text-white')}
       ${statCard('Concluídas', tarefas.filter(t=>t.status==='concluida').length, 'check-circle', 'gradient-lav', 'text-white')}
     </div>
-
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
       <div class="flex-1 flex items-center gap-2">
         <select id="filtroTarefa" class="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
@@ -1500,7 +1869,6 @@ function renderTarefas(){
         <i data-lucide="plus" class="w-4 h-4"></i> Nova tarefa
       </button>
     </div>
-
     <div id="listaTarefas" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
   `;
   drawTarefas();
@@ -1513,7 +1881,6 @@ function drawTarefas(){
   if(f==='ativas') lista = lista.filter(t=>t.status==='ativa' && new Date(t.prazo)>=hoje);
   else if(f==='vencidas') lista = lista.filter(t=>t.status==='ativa' && new Date(t.prazo)<hoje);
   else if(f==='concluidas') lista = lista.filter(t=>t.status==='concluida');
-
   const el = document.getElementById('listaTarefas');
   if(!lista.length){ el.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500">Nenhuma tarefa encontrada.</div>`; return; }
   el.innerHTML = lista.map(t=>{
@@ -1875,210 +2242,4 @@ function renderFinanceiro(){
           ${prox.map(a=>`<div class="flex justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
             <div><p class="font-semibold text-sm">${a.nome}</p><p class="text-xs text-slate-500">Dia ${a.vencimentoDia||10}</p></div>
             <span class="font-bold text-amber-700">${fmtBRL(a.valor)}</span>
-          </div>`).join('') || '<p class="text-sm text-slate-500">Nenhum próximo.</p>'}
-        </div>
-      </div>
-    </div>
-  `;
-  drawFinChart('mensal');
-  document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>{
-    document.querySelectorAll('.fbtn').forEach(x=>{x.classList.remove('bg-brand-500','text-white');x.classList.add('bg-slate-100','dark:bg-slate-700');});
-    b.classList.add('bg-brand-500','text-white'); b.classList.remove('bg-slate-100','dark:bg-slate-700');
-    drawFinChart(b.dataset.f);
-  }));
-}
-function receitaMes(pags,d){ return pags.filter(p=>{const x=new Date(p.data);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear();}).reduce((s,p)=>s+p.valor,0); }
-function receitaAno(pags,d){ return pags.filter(p=>new Date(p.data).getFullYear()===d.getFullYear()).reduce((s,p)=>s+p.valor,0); }
-let chartFin;
-function drawFinChart(mode){
-  const pags = DB.pagamentos.all();
-  const hoje = new Date();
-  const labels=[], data=[];
-  if(mode==='semanal'){
-    for(let i=6;i>=0;i--){
-      const d = new Date(hoje); d.setDate(hoje.getDate()-i);
-      labels.push(d.toLocaleDateString('pt-BR',{weekday:'short'}));
-      data.push(pags.filter(p=>new Date(p.data).toDateString()===d.toDateString()).reduce((s,p)=>s+p.valor,0));
-    }
-  } else if(mode==='mensal'){
-    for(let i=29;i>=0;i--){
-      const d = new Date(hoje); d.setDate(hoje.getDate()-i);
-      labels.push(d.getDate());
-      data.push(pags.filter(p=>new Date(p.data).toDateString()===d.toDateString()).reduce((s,p)=>s+p.valor,0));
-    }
-  } else {
-    for(let i=11;i>=0;i--){
-      const d = new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
-      labels.push(d.toLocaleDateString('pt-BR',{month:'short'}));
-      data.push(pags.filter(p=>{const x=new Date(p.data);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear();}).reduce((s,p)=>s+p.valor,0));
-    }
-  }
-  const ctx = document.getElementById('chartFin').getContext('2d');
-  if(chartFin) chartFin.destroy();
-  chartFin = new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Receita',data,borderColor:'#3f6bff',backgroundColor:'rgba(63,107,255,.15)',fill:true,tension:.35}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
-}
-
-/* ============ AUTOMAÇÃO ============ */
-function renderAutomacao(){
-  const cfg = DB.config.get();
-  document.getElementById('content').innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-3">🤖 Configuração da API WhatsApp</h3>
-        <div class="space-y-3">
-          <div><label class="text-xs font-semibold">Endpoint</label>
-            <input id="cfgEndpoint" value="${cfg.endpoint||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-          <div><label class="text-xs font-semibold">Token</label>
-            <input id="cfgToken" type="password" value="${cfg.token||''}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
-          <button onclick="saveCfg()" class="w-full px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar</button>
-        </div>
-      </div>
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-3">Fluxo automático</h3>
-        <ul class="space-y-3 text-sm">
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="bell" class="w-5 h-5 text-amber-500"></i><div><b>3 dias antes</b><p class="text-xs text-slate-500">Lembrete automático.</p></div></li>
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i><div><b>No vencimento</b><p class="text-xs text-slate-500">Aviso de pendência.</p></div></li>
-          <li class="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i><div><b>Após pagamento</b><p class="text-xs text-slate-500">Confirmação automática.</p></div></li>
-        </ul>
-        <button onclick="simularAutomacao()" class="mt-4 w-full px-5 py-2.5 rounded-xl gradient-mint text-white font-semibold flex items-center justify-center gap-2"><i data-lucide="play" class="w-4 h-4"></i> Simular verificação</button>
-      </div>
-    </div>
-  `;
-}
-function saveCfg(){
-  DB.config.set({endpoint:document.getElementById('cfgEndpoint').value,token:document.getElementById('cfgToken').value});
-  toast('Configuração salva!');
-}
-function simularAutomacao(){
-  const alunos = DB.alunos.all().filter(a=>a.status==='ativo');
-  const hoje = new Date();
-  let avisos = 0;
-  alunos.forEach(a=>{
-    const v = new Date(hoje.getFullYear(), hoje.getMonth(), a.vencimentoDia||10);
-    const diff = Math.round((v-hoje)/(1000*60*60*24));
-    if(diff===3||diff===0||diff<0) avisos++;
-  });
-  toast(`Verificação: ${avisos} ação(ões) identificada(s).`);
-}
-
-/* ============ RELATÓRIOS ============ */
-function renderRelatorios(){
-  document.getElementById('content').innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-      ${relCard('Alunos','Lista completa de alunos','users','relAlunos')}
-      ${relCard('Financeiro','Receitas e pagamentos','wallet','relFin')}
-      ${relCard('Turmas','Ocupação e distribuição','book-open','relTurmas')}
-      ${relCard('Inadimplência','Pagamentos em atraso','alert-triangle','relInad')}
-      ${relCard('Desempenho','Notas e médias dos alunos','clipboard-list','relDesemp')}
-      ${relCard('Boletins','Boletim individual por aluno','file-text','relBoletim')}
-      ${relCard('Frequência','Relatório de presença e faltas','calendar-check','relFreq')}
-      ${relCard('Tarefas','Tarefas atribuídas e concluídas','list-checks','relTarefas')}
-      ${relCard('Portfólio','Lista de documentos e provas','folder-open','relPortfolio')}
-    </div>
-  `;
-}
-function relCard(t,d,icon,fn){
-  return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-    <div class="flex items-center gap-3 mb-3"><div class="w-12 h-12 rounded-xl gradient-brand flex items-center justify-center text-white"><i data-lucide="${icon}" class="w-6 h-6"></i></div><div><h3 class="font-bold">${t}</h3><p class="text-xs text-slate-500">${d}</p></div></div>
-    <div class="flex gap-2">
-      <button onclick="${fn}('pdf')" class="flex-1 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 text-sm font-semibold flex items-center justify-center gap-1"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
-      <button onclick="${fn}('xlsx')" class="flex-1 px-3 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-sm font-semibold flex items-center justify-center gap-1"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel</button>
-    </div>
-  </div>`;
-}
-function relAlunos(fmt){
-  const rows = DB.alunos.all().map(a=>{
-    const t = DB.turmas.all().find(x=>x.id===a.turmaId);
-    return [a.nome,a.responsavel,a.telefone,t?t.nome:'',fmtBRL(a.valor),a.status,fmtDate(a.dataCadastro)];
-  });
-  exportar(fmt,'Alunos',['Nome','Responsável','Telefone','Turma','Valor','Status','Cadastro'],rows);
-}
-function relFin(fmt){
-  const rows = DB.pagamentos.all().map(p=>{
-    const a = DB.alunos.all().find(x=>x.id===p.alunoId);
-    return [a?a.nome:'—',fmtDateTime(p.data),p.metodo,fmtBRL(p.valor),p.referente||''];
-  });
-  exportar(fmt,'Pagamentos',['Aluno','Data','Método','Valor','Referente'],rows);
-}
-function relTurmas(fmt){
-  const alunos = DB.alunos.all();
-  const porTurma = {};
-  alunos.forEach(a=>porTurma[a.turmaId]=(porTurma[a.turmaId]||0)+1);
-  const rows = DB.turmas.all().map(t=>{
-    const qtd = porTurma[t.id]||0;
-    return [t.nome,t.professor,t.horario,qtd,t.maxAlunos,t.maxAlunos-qtd,Math.round(qtd/t.maxAlunos*100)+'%'];
-  });
-  exportar(fmt,'Turmas',['Turma','Professor','Horário','Alunos','Máx','Vagas','Ocupação'],rows);
-}
-function relInad(fmt){
-  const hoje = new Date();
-  const pags = DB.pagamentos.all();
-  const rows = DB.alunos.all().filter(a=>{
-    if(a.status!=='ativo') return false;
-    const v = new Date(hoje.getFullYear(),hoje.getMonth(),a.vencimentoDia||10);
-    return v<hoje && !pags.some(p=>p.alunoId===a.id && new Date(p.data).getMonth()===hoje.getMonth());
-  }).map(a=>[a.nome,a.responsavel,a.telefone,fmtBRL(a.valor),'Dia '+a.vencimentoDia]);
-  exportar(fmt,'Inadimplentes',['Aluno','Responsável','Telefone','Valor','Vencimento'],rows);
-}
-function relDesemp(fmt){
-  const rows = DB.alunos.all().filter(a=>a.status==='ativo').map(a=>{
-    const medias = calcularMedias(a.id);
-    const discs = Object.keys(medias);
-    const mediaGeral = discs.length ? discs.reduce((s,d)=>s+medias[d].media,0)/discs.length : 0;
-    return [a.nome, discs.join(', '), mediaGeral.toFixed(1), mediaGeral>=6?'Aprovado':'Reprovado'];
-  });
-  exportar(fmt,'Desempenho',['Aluno','Disciplinas','Média Geral','Situação'],rows);
-}
-function relBoletim(fmt){
-  const rows = [];
-  DB.alunos.all().filter(a=>a.status==='ativo').forEach(a=>{
-    const medias = calcularMedias(a.id);
-    Object.keys(medias).forEach(d=>{
-      const m = medias[d];
-      rows.push([a.nome,d,m[1]?m[1].toFixed(1):'—',m[2]?m[2].toFixed(1):'—',m[3]?m[3].toFixed(1):'—',m.media.toFixed(1)]);
-    });
-  });
-  exportar(fmt,'Boletim',['Aluno','Disciplina','1º Trim','2º Trim','3º Trim','Média'],rows);
-}
-function relFreq(fmt){
-  const rows = DB.alunos.all().filter(a=>a.status==='ativo').map(a=>{
-    const f = calcularFrequencia(a.id);
-    return [a.nome,f.presentes,f.faltas,f.justificadas,f.percentual.toFixed(0)+'%',f.percentual>=75?'Adequada':'Baixa'];
-  });
-  exportar(fmt,'Frequência',['Aluno','Presentes','Faltas','Justificadas','Frequência','Situação'],rows);
-}
-function relTarefas(fmt){
-  const rows = DB.tarefas.all().map(t=>{
-    const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
-    return [t.titulo,turma?turma.nome:'Todas',fmtDate(t.prazo),t.valor+' pts',t.status==='ativa'?'Ativa':'Concluída'];
-  });
-  exportar(fmt,'Tarefas',['Título','Turma','Prazo','Valor','Status'],rows);
-}
-function relPortfolio(fmt){
-  const rows = DB.portfolios.all().map(p=>{
-    const a = DB.alunos.all().find(x=>x.id===p.alunoId);
-    return [a?a.nome:'—',p.disciplina,p.tipo,fmtDate(p.data),p.fileName];
-  });
-  exportar(fmt,'Portfólio',['Aluno','Disciplina','Tipo','Data','Arquivo'],rows);
-}
-function exportar(fmt,nome,heads,rows){
-  if(fmt==='xlsx'){
-    const ws = XLSX.utils.aoa_to_sheet([heads,...rows]);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,nome);
-    XLSX.writeFile(wb,`${nome}.xlsx`);
-  } else {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.setFontSize(16); doc.text('Relatório — '+nome,14,18);
-    doc.autoTable({head:[heads],body:rows,startY:25,styles:{fontSize:9}});
-    doc.save(`${nome}.pdf`);
-  }
-  toast('Relatório gerado!');
-}
-
-/* ============ INIT ============ */
-go('dashboard');
-lucide.createIcons();
-</script>
-</body>
-</html>
+          </div>`).join('') || '<p class="text-sm text-slate-500
