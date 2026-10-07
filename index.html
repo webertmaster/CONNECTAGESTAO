@@ -387,6 +387,7 @@ const DB = {
   tarefas:    { all:()=>DB._get('tarefas'),    save:(a)=>DB._set('tarefas',a) },
   portfolios: { all:()=>DB._get('portfolios'), save:(a)=>DB._set('portfolios',a) },
   mensalidades:{ all:()=>DB._get('mensalidades'), save:(a)=>DB._set('mensalidades',a) },
+  observacoes:{ all:()=>DB._get('observacoes'), save:(a)=>DB._set('observacoes',a) },
   config:     { get:()=>{ try{ return JSON.parse(localStorage.getItem('edu_config')||'{}'); }catch(e){ return {}; } },
                 set:(c)=>localStorage.setItem('edu_config',JSON.stringify(c)) }
 };
@@ -486,7 +487,10 @@ function calcularFrequencia(alunoId){
 function getTarefasAluno(alunoId){
   const aluno = DB.alunos.all().find(a=>a.id===alunoId);
   if(!aluno) return [];
-  return DB.tarefas.all().filter(t=>t.status==='ativa' && (t.turmaId===aluno.turmaId || (t.alunosIds||[]).includes(alunoId)));
+  return DB.tarefas.all().filter(t=>{
+    const e = entregaDe(t,alunoId);
+    return t.status==='ativa' && tarefaAtribuida(t,aluno) && !(e && e.entregue);
+  });
 }
 
 /* ============ NAV ============ */
@@ -729,6 +733,7 @@ function drawAlunos(){
       <div class="flex gap-2 mt-4">
         <button onclick="verAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-semibold">Ver</button>
         <button onclick="formAluno('${a.id}')" class="flex-1 px-3 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 hover:bg-brand-200 text-sm font-semibold">Editar</button>
+        <button onclick="relatorioPais('${a.id}')" title="Relatório para os pais" class="px-3 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200"><i data-lucide="file-text" class="w-4 h-4"></i></button>
         <button onclick="delAluno('${a.id}')" class="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
       </div>
     </div>`;
@@ -811,7 +816,7 @@ function verAluno(alunoId, abaInicial){
   const disciplinas = Object.keys(medias);
   const mediaGeral = disciplinas.length ? disciplinas.reduce((s,d)=>s+medias[d].media,0)/disciplinas.length : 0;
   const freq = calcularFrequencia(alunoId);
-  const tarefas = getTarefasAluno(alunoId);
+  const tarefas = tarefasDoAluno(a);
   const portfolio = DB.portfolios.all().filter(p=>p.alunoId===alunoId).sort((x,y)=>new Date(y.data)-new Date(x.data));
 
   openModal(a.nome, `
@@ -844,7 +849,10 @@ function verAluno(alunoId, abaInicial){
             <p class="text-xs text-slate-500">Média Geral</p>
             <p class="text-2xl font-bold ${mediaGeral>=6?'text-emerald-600':'text-red-600'}">${mediaGeral?mediaGeral.toFixed(1):'—'}</p>
           </div>
-          <button onclick="gerarBoletimPDF('${alunoId}')" class="px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
+          <div class="flex gap-2">
+            <button onclick="relatorioPais('${alunoId}')" class="px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="message-circle" class="w-4 h-4"></i> Relatório para os pais</button>
+            <button onclick="gerarBoletimPDF('${alunoId}')" class="px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-semibold text-sm flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
+          </div>
         </div>
         <div class="space-y-2">
           ${disciplinas.map(d=>{
@@ -895,14 +903,21 @@ function verAluno(alunoId, abaInicial){
       <div id="tabTarefas" class="hidden">
         <div class="space-y-2">
           ${tarefas.map(tf=>{
+            const e = entregaDe(tf,alunoId);
+            const entregue = !!(e && e.entregue);
             const vencida = isVencida(tf.prazo);
-            return `<div class="p-3 rounded-xl ${vencida?'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800':'bg-slate-50 dark:bg-slate-700/40'}">
+            let badge, box = 'bg-slate-50 dark:bg-slate-700/40';
+            if(entregue) badge = '<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Entregue</span>';
+            else if(tf.status==='concluida'){ badge = '<span class="badge bg-red-200 text-red-900">Não entregou</span>'; box = 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'; }
+            else if(vencida){ badge = '<span class="badge bg-red-200 text-red-900">Atrasada</span>'; box = 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'; }
+            else badge = '<span class="badge bg-brand-100 text-brand-700">Pendente</span>';
+            return `<div class="p-3 rounded-xl ${box}">
               <div class="flex justify-between items-start mb-1">
                 <p class="font-bold text-sm">${esc(tf.titulo)}</p>
-                ${vencida?'<span class="badge bg-red-200 text-red-900">Vencida</span>':'<span class="badge bg-brand-100 text-brand-700">Pendente</span>'}
+                ${badge}
               </div>
               <p class="text-xs text-slate-500 mb-1">${esc(tf.descricao)}</p>
-              <p class="text-xs text-slate-500">Prazo: ${fmtDate(tf.prazo)} • Valor: ${tf.valor} pts</p>
+              <p class="text-xs text-slate-500">Prazo: ${fmtDate(tf.prazo)} • Valor: ${tf.valor} pts${entregue && e.nota!=null ? ' • Nota: '+e.nota.toFixed(1) : ''}</p>
             </div>`;
           }).join('') || '<p class="text-sm text-slate-500">Nenhuma tarefa atribuída.</p>'}
         </div>
@@ -1753,6 +1768,7 @@ function drawTarefas(){
     const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
     const vencida = t.status==='ativa' && isVencida(t.prazo);
     const concluida = t.status==='concluida';
+    const prog = progressoTarefa(t);
     const corStatus = concluida?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300':vencida?'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300':'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300';
     return `<div class="card-hover bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex items-start justify-between mb-3">
@@ -1767,7 +1783,9 @@ function drawTarefas(){
         <p><i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1 text-slate-400"></i> Prazo: ${fmtDate(t.prazo)}</p>
         <p><i data-lucide="award" class="w-3.5 h-3.5 inline mr-1 text-slate-400"></i> Valor: ${t.valor} pontos</p>
       </div>
-      <div class="flex gap-2 mt-4">
+      ${prog.total?`<div class="mt-3"><div class="flex justify-between text-xs mb-1"><span class="text-slate-500">Entregas</span><b>${prog.ent}/${prog.total}</b></div><div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2"><div class="h-2 rounded-full gradient-mint" style="width:${prog.pct}%"></div></div></div>`:''}
+      <div class="flex flex-wrap gap-2 mt-4">
+        <button onclick="abrirEntregas('${t.id}')" class="flex-1 px-3 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 text-sm font-semibold"><i data-lucide="clipboard-check" class="w-4 h-4 inline"></i> Entregas</button>
         ${t.status==='ativa'?`<button onclick="concluirTarefa('${t.id}')" class="flex-1 px-3 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 text-sm font-semibold"><i data-lucide="check" class="w-4 h-4 inline"></i> Concluir</button>`:''}
         <button onclick="formTarefa('${t.id}')" class="flex-1 px-3 py-2 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 hover:bg-brand-200 text-sm font-semibold">Editar</button>
         <button onclick="delTarefa('${t.id}')" class="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -1814,6 +1832,7 @@ function formTarefa(editId){
     } else {
       data.id = id();
       data.alunosIds = [];
+      data.entregas = {};
       data.status = 'ativa';
       data.dataCriacao = new Date().toISOString();
       lista.push(data);
@@ -1830,7 +1849,304 @@ function concluirTarefa(tid){
 function delTarefa(tid){
   if(!confirm('Excluir esta tarefa?')) return;
   DB.tarefas.save(DB.tarefas.all().filter(t=>t.id!==tid));
+  DB.notas.save(DB.notas.all().filter(n=>n.tarefaId!==tid));
   toast('Tarefa excluída'); renderTarefas();
+}
+
+/* ============ ETAPA 3: ENTREGAS E RELATÓRIO PARA OS PAIS ============ */
+function tarefaAtribuida(t,a){ return !t.turmaId || t.turmaId===a.turmaId || (t.alunosIds||[]).includes(a.id); }
+function alunosDaTarefa(t){ return DB.alunos.all().filter(a=>a.status==='ativo' && tarefaAtribuida(t,a)); }
+function tarefasDoAluno(a){
+  return DB.tarefas.all().filter(t=>tarefaAtribuida(t,a))
+    .sort((x,y)=>(parseDate(y.prazo)||0)-(parseDate(x.prazo)||0));
+}
+function entregaDe(t,aid){ return (t.entregas||{})[aid] || null; }
+function progressoTarefa(t){
+  const als = alunosDaTarefa(t);
+  const e = t.entregas||{};
+  const ent = als.filter(a=>e[a.id] && e[a.id].entregue).length;
+  return {total:als.length, ent, pct: als.length ? Math.round(ent/als.length*100) : 0};
+}
+function trimestreAtual(){ return Math.floor(new Date().getMonth()/4)+1; }
+
+/* ----- Entregas por aluno ----- */
+function abrirEntregas(tid){
+  const t = DB.tarefas.all().find(x=>x.id===tid); if(!t) return;
+  const als = alunosDaTarefa(t);
+  const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
+  const disc = t.disciplina || (turma && turma.disciplinas && turma.disciplinas[0]) || '';
+  const tri = t.trimestre || trimestreAtual();
+  const ent = t.entregas||{};
+  openModal('Entregas: '+t.titulo, `
+    <form id="formEnt" class="space-y-4">
+      <p class="text-sm text-slate-500">${turma?esc(turma.nome):'Todas as turmas'} • Prazo: ${fmtDate(t.prazo)}</p>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold">Disciplina (usada nas notas)</label>
+          <input name="disc" value="${esc(disc)}" placeholder="Ex: Matemática" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
+        <div><label class="text-xs font-semibold">Trimestre</label>
+          <select name="tri" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <option value="1" ${tri===1?'selected':''}>1º</option><option value="2" ${tri===2?'selected':''}>2º</option><option value="3" ${tri===3?'selected':''}>3º</option>
+          </select></div>
+      </div>
+      <div class="flex items-center justify-between">
+        <p class="text-sm font-semibold">Alunos <span id="entCont" class="text-emerald-600 ml-1"></span></p>
+        <button type="button" id="btnTodosEnt" class="px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">Marcar todos como entregue</button>
+      </div>
+      <div class="space-y-2 max-h-80 overflow-y-auto">
+        ${als.map(a=>{
+          const e = ent[a.id];
+          const ok = !!(e && e.entregue);
+          return `<div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+            <label class="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+              <input type="checkbox" class="checkbox-custom ent-chk" data-aluno="${a.id}" ${ok?'checked':''}/>
+              <span class="font-semibold text-sm truncate">${esc(a.nome)}</span>
+            </label>
+            <input type="number" step="0.1" min="0" max="10" placeholder="Nota" data-aluno="${a.id}" value="${ok && e.nota!=null ? e.nota : ''}" ${ok?'':'disabled'}
+              class="ent-nota w-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm disabled:opacity-40"/>
+          </div>`;
+        }).join('') || '<p class="text-sm text-slate-500 text-center py-4">Nenhum aluno ativo nesta tarefa.</p>'}
+      </div>
+      <p class="text-xs text-slate-500">A nota é opcional (0 a 10). Quando preenchida, entra no Desempenho do aluno. A tarefa é concluída sozinha quando todos entregam.</p>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Cancelar</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl gradient-brand text-white font-semibold">Salvar entregas</button>
+      </div>
+    </form>
+  `);
+
+  const form = document.getElementById('formEnt');
+  const chks = Array.from(form.querySelectorAll('.ent-chk'));
+  const notaDe = aid => form.querySelector(`.ent-nota[data-aluno="${aid}"]`);
+  const conta = ()=>{ document.getElementById('entCont').textContent = `${chks.filter(c=>c.checked).length}/${chks.length} entregaram`; };
+  chks.forEach(c=>c.addEventListener('change',()=>{
+    const n = notaDe(c.dataset.aluno);
+    n.disabled = !c.checked;
+    if(!c.checked) n.value = '';
+    conta();
+  }));
+  document.getElementById('btnTodosEnt').addEventListener('click',()=>{
+    chks.forEach(c=>{ c.checked = true; notaDe(c.dataset.aluno).disabled = false; });
+    conta();
+  });
+  conta();
+
+  form.addEventListener('submit',e=>{
+    e.preventDefault();
+    const dsc = form.querySelector('[name=disc]').value.trim();
+    const trim = parseInt(form.querySelector('[name=tri]').value);
+    const tarefas = DB.tarefas.all();
+    const tt = tarefas.find(x=>x.id===tid);
+    if(!tt) return;
+    tt.entregas = tt.entregas||{};
+    const idsLista = als.map(a=>a.id);
+    const notas = DB.notas.all().filter(n=>!(n.tarefaId===tid && idsLista.includes(n.alunoId)));
+    let semDisc = false;
+    chks.forEach(c=>{
+      const aid = c.dataset.aluno;
+      const v = parseFloat(notaDe(aid).value);
+      const nota = c.checked && !isNaN(v) ? Math.min(10,Math.max(0,v)) : null;
+      const prev = tt.entregas[aid];
+      if(c.checked) tt.entregas[aid] = {entregue:true, nota, data:(prev && prev.data) || hojeISO()};
+      else delete tt.entregas[aid];
+      if(nota!==null){
+        if(!dsc) semDisc = true;
+        notas.push({id:id(),alunoId:aid,disciplina:dsc,tipo:'Trabalho',nota,notaMax:10,trimestre:trim,data:hojeISO(),tarefaId:tid});
+      }
+    });
+    if(semDisc) return toast('Informe a disciplina para lançar as notas.','error');
+    tt.disciplina = dsc; tt.trimestre = trim;
+    const todos = als.length>0 && als.every(a=>tt.entregas[a.id]);
+    if(todos && tt.status==='ativa'){ tt.status='concluida'; tt.concluidaAuto = true; }
+    else if(!todos && tt.status==='concluida' && tt.concluidaAuto){ tt.status='ativa'; tt.concluidaAuto = false; }
+    if(!DB.notas.save(notas)) return;
+    DB.tarefas.save(tarefas);
+    closeModal();
+    toast(todos ? 'Entregas salvas. Tarefa concluída!' : 'Entregas salvas!');
+    refreshPagina();
+  });
+}
+
+/* ----- Observações do professor (por aluno e período) ----- */
+function getObs(aid,key){
+  const o = DB.observacoes.all().find(x=>x.alunoId===aid && x.periodo===key);
+  return o ? o.obs : '';
+}
+function setObs(aid,key,txt){
+  const lista = DB.observacoes.all();
+  const i = lista.findIndex(x=>x.alunoId===aid && x.periodo===key);
+  const t = (txt||'').trim();
+  if(!t){ if(i>=0) lista.splice(i,1); else return; }
+  else if(i>=0) lista[i].obs = t;
+  else lista.push({id:id(),alunoId:aid,periodo:key,obs:t});
+  DB.observacoes.save(lista);
+}
+
+/* ----- Relatório para os pais ----- */
+function parsePeriodo(key){
+  const p = key.split(':');
+  if(p[0]==='m'){
+    const [y,m] = p[1].split('-').map(Number);
+    return {tipo:'m', key, comp:p[1], label:compLabel(p[1]), txt:'de '+compMes(p[1]), ini:new Date(y,m-1,1), fim:new Date(y,m,0,23,59,59)};
+  }
+  const y = +p[1], k = +p[2];
+  return {tipo:'tri', key, tri:k, ano:y, label:`${k}º trimestre de ${y}`, txt:`do ${k}º trimestre`, ini:new Date(y,(k-1)*4,1), fim:new Date(y,k*4,0,23,59,59)};
+}
+
+function dadosRelatorio(a,per){
+  const dentro = d=>{ const x = parseDate(d); return !!x && x>=per.ini && x<=per.fim; };
+  const norm = n => (+n.nota||0)/(+n.notaMax||10)*10;
+  const notas = DB.notas.all().filter(n=>n.alunoId===a.id && (per.tipo==='tri' ? n.trimestre===per.tri : dentro(n.data)));
+  const media = notas.length ? notas.reduce((s,n)=>s+norm(n),0)/notas.length : null;
+  const disc = {};
+  notas.forEach(n=>{ (disc[n.disciplina] = disc[n.disciplina]||[]).push(norm(n)); });
+  const porDisc = Object.keys(disc).map(k=>({disciplina:k, media:disc[k].reduce((s,x)=>s+x,0)/disc[k].length, qtd:disc[k].length}));
+
+  const fr = DB.frequencias.all().filter(f=>f.alunoId===a.id && dentro(f.data));
+  const pres = fr.filter(f=>f.status==='presente').length;
+  const freq = {
+    total:fr.length, presentes:pres,
+    faltas:fr.filter(f=>f.status==='falta').length,
+    justificadas:fr.filter(f=>f.status==='justificada').length,
+    pct: fr.length ? pres/fr.length*100 : null
+  };
+
+  const tarefas = tarefasDoAluno(a).filter(t=>dentro(t.prazo)).map(t=>{
+    const e = entregaDe(t,a.id);
+    const entregue = !!(e && e.entregue);
+    const st = entregue ? 'Entregue' : t.status==='concluida' ? 'Não entregou' : isVencida(t.prazo) ? 'Atrasada' : 'Pendente';
+    return {t, entregue, nota:(e && e.nota!=null) ? e.nota : null, st};
+  });
+
+  const ci = compOf(per.ini), cf = compOf(per.fim);
+  const itens = DB.mensalidades.all().filter(m=>m.alunoId===a.id && m.competencia>=ci && m.competencia<=cf);
+  let finTxt = 'sem mensalidade neste período';
+  if(itens.length){
+    const abertas = itens.filter(m=>!m.pagoEm);
+    finTxt = abertas.length
+      ? abertas.map(m=>`${compMes(m.competencia)} ${stMens(m).tipo==='atrasado'?'em atraso':'vence em '+fmtDate(m.vencimento)}`).join('; ')
+      : 'em dia';
+  }
+  return {notas, media, porDisc, freq, tarefas, tTot:tarefas.length, tEnt:tarefas.filter(x=>x.entregue).length, finTxt};
+}
+
+function montarMsgRelatorio(a,per,d,obs,incFin){
+  const L = [`Olá, ${a.responsavel}! Segue o resumo ${per.txt} do aluno ${a.nome}:`];
+  L.push('- Média: ' + (d.media!==null ? d.media.toFixed(1).replace('.',',') : 'sem notas no período'));
+  L.push('- Frequência: ' + (d.freq.pct!==null ? Math.round(d.freq.pct)+'%' : 'sem registros no período'));
+  L.push('- Tarefas entregues: ' + (d.tTot ? `${d.tEnt} de ${d.tTot}` : 'nenhuma tarefa no período'));
+  if(incFin) L.push('- Mensalidade: '+d.finTxt);
+  if(obs) L.push('', 'Observação do professor: '+obs);
+  L.push('', 'Qualquer dúvida, é só chamar.');
+  return L.join('\n');
+}
+
+function gerarRelatorioPDF(a,per,d,obs,incFin){
+  const t = DB.turmas.all().find(x=>x.id===a.turmaId);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(18); doc.text('Relatório do Aluno',14,20);
+  doc.setFontSize(10); doc.text('EduGestão — Reforço Escolar',14,28);
+  doc.setDrawColor(63,107,255); doc.setLineWidth(1); doc.line(14,32,196,32);
+  doc.setFontSize(11);
+  doc.text(`Aluno: ${a.nome}`,14,42);
+  doc.text(`Turma: ${t?t.nome:'—'}`,14,50);
+  doc.text(`Responsável: ${a.responsavel}`,14,58);
+  doc.text(`Período: ${per.label}`,120,42);
+  const mediaTxt = d.media!==null ? d.media.toFixed(1).replace('.',',') : '—';
+  const freqTxt = d.freq.pct!==null ? Math.round(d.freq.pct)+'%' : '—';
+  const tarTxt = d.tTot ? `${d.tEnt} de ${d.tTot}` : '—';
+  doc.text(`Média: ${mediaTxt}     Frequência: ${freqTxt}     Tarefas entregues: ${tarTxt}`,14,70);
+  let y = 78;
+  if(d.porDisc.length){
+    doc.autoTable({startY:y, head:[['Disciplina','Média','Avaliações']],
+      body:d.porDisc.map(x=>[x.disciplina,x.media.toFixed(1).replace('.',','),x.qtd]),
+      styles:{fontSize:9}, headStyles:{fillColor:[63,107,255]}});
+    y = doc.lastAutoTable.finalY + 8;
+  }
+  if(d.tarefas.length){
+    doc.autoTable({startY:y, head:[['Tarefa','Prazo','Situação','Nota']],
+      body:d.tarefas.map(x=>[x.t.titulo,fmtDate(x.t.prazo),x.st,x.nota!==null?x.nota.toFixed(1).replace('.',','):'—']),
+      styles:{fontSize:9}, headStyles:{fillColor:[63,107,255]}});
+    y = doc.lastAutoTable.finalY + 8;
+  }
+  doc.setFontSize(11);
+  if(incFin){
+    if(y>270){ doc.addPage(); y = 20; }
+    doc.text('Mensalidade: '+d.finTxt,14,y); y += 10;
+  }
+  if(obs){
+    if(y>250){ doc.addPage(); y = 20; }
+    doc.setFont(undefined,'bold'); doc.text('Observação do professor',14,y);
+    doc.setFont(undefined,'normal'); doc.text(doc.splitTextToSize(obs,180),14,y+7);
+  }
+  doc.save(`relatorio-${a.nome.replace(/\s/g,'_')}-${per.key.replace(/:/g,'-')}.pdf`);
+  toast('Relatório gerado!');
+}
+
+function relatorioPais(alunoId){
+  const a = DB.alunos.all().find(x=>x.id===alunoId); if(!a) return;
+  const atual = compAtual();
+  const ano = new Date().getFullYear();
+  const opts = [];
+  for(let i=0;i<6;i++){ const c = addMes(atual,-i); opts.push({v:'m:'+c, l:compLabel(c)}); }
+  [1,2,3].forEach(k=>opts.push({v:`tri:${ano}:${k}`, l:`${k}º trimestre de ${ano}`}));
+  openModal('Relatório para os pais', `
+    <div class="space-y-4">
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40 text-sm">
+        <b>${esc(a.nome)}</b><br><span class="text-slate-500">Para: ${esc(a.responsavel)} (${esc(a.telefone)})</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+        <div><label class="text-xs font-semibold">Período</label>
+          <select id="relPer" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            ${opts.map(o=>`<option value="${o.v}">${o.l}</option>`).join('')}
+          </select></div>
+        <label class="flex items-center gap-2 text-sm cursor-pointer pb-2"><input type="checkbox" id="relFin" class="checkbox-custom"/> Incluir situação da mensalidade</label>
+      </div>
+      <div id="relResumo"></div>
+      <div><label class="text-xs font-semibold">Observação do professor</label>
+        <textarea id="relObs" rows="3" placeholder="Ex: Muito participativa. Reforçar frações." class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea></div>
+      <div><label class="text-xs font-semibold">Mensagem para o WhatsApp (você pode editar)</label>
+        <textarea id="relMsg" rows="8" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea></div>
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold">Fechar</button>
+        <button type="button" id="relPdf" class="px-5 py-2.5 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-semibold flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> Gerar PDF</button>
+        <a id="relLink" href="#" target="_blank" rel="noopener" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center gap-2"><i data-lucide="message-circle" class="w-4 h-4"></i> Abrir WhatsApp</a>
+      </div>
+    </div>
+  `);
+
+  const sel = document.getElementById('relPer');
+  const chk = document.getElementById('relFin');
+  const obs = document.getElementById('relObs');
+  const msg = document.getElementById('relMsg');
+  const link = document.getElementById('relLink');
+  const pdf = document.getElementById('relPdf');
+  const resumo = document.getElementById('relResumo');
+  let per, d;
+
+  const card = (rotulo,valor,bom)=>`<div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40 text-center">
+    <p class="text-xs text-slate-500">${rotulo}</p>
+    <p class="text-xl font-bold ${bom===null?'':bom?'text-emerald-600':'text-red-600'}">${valor}</p></div>`;
+  const atualizaLink = ()=>{ link.href = `https://wa.me/${foneWA(a.telefone)}?text=${encodeURIComponent(msg.value)}`; };
+  const desenha = ()=>{
+    resumo.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-${chk.checked?4:3} gap-3">
+      ${card('Média', d.media!==null?d.media.toFixed(1).replace('.',','):'—', d.media!==null?d.media>=6:null)}
+      ${card('Frequência', d.freq.pct!==null?Math.round(d.freq.pct)+'%':'—', d.freq.pct!==null?d.freq.pct>=75:null)}
+      ${card('Tarefas entregues', d.tTot?`${d.tEnt} de ${d.tTot}`:'—', null)}
+      ${chk.checked?card('Mensalidade', esc(d.finTxt.length>14?(d.finTxt==='sem mensalidade neste período'?'—':'em aberto'):d.finTxt), null):''}
+    </div>`;
+  };
+  const gerarMsg = ()=>{ msg.value = montarMsgRelatorio(a,per,d,obs.value.trim(),chk.checked); atualizaLink(); };
+  const salvar = ()=>setObs(a.id,per.key,obs.value);
+  const carrega = ()=>{ per = parsePeriodo(sel.value); d = dadosRelatorio(a,per); obs.value = getObs(a.id,per.key); desenha(); gerarMsg(); };
+
+  sel.addEventListener('change',carrega);
+  chk.addEventListener('change',()=>{ desenha(); gerarMsg(); });
+  obs.addEventListener('change',()=>{ salvar(); gerarMsg(); });
+  msg.addEventListener('input',atualizaLink);
+  link.addEventListener('click',salvar);
+  pdf.addEventListener('click',()=>{ salvar(); gerarRelatorioPDF(a,per,d,obs.value.trim(),chk.checked); });
+  carrega();
 }
 
 /* ============ TURMAS ============ */
@@ -2443,6 +2759,7 @@ function renderRelatorios(){
       ${relCard('Boletins','Boletim individual por aluno','file-text','relBoletim')}
       ${relCard('Frequência','Relatório de presença e faltas','calendar-check','relFreq')}
       ${relCard('Tarefas','Tarefas atribuídas e concluídas','list-checks','relTarefas')}
+      ${relCard('Entregas','Quem entregou cada tarefa','clipboard-check','relEntregas')}
       ${relCard('Portfólio','Lista de documentos e provas','folder-open','relPortfolio')}
     </div>
   `;
@@ -2527,9 +2844,23 @@ function relFreq(fmt){
 function relTarefas(fmt){
   const rows = DB.tarefas.all().map(t=>{
     const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
-    return [t.titulo,turma?turma.nome:'Todas',fmtDate(t.prazo),t.valor+' pts',t.status==='ativa'?'Ativa':'Concluída'];
+    const pg = progressoTarefa(t);
+    return [t.titulo,turma?turma.nome:'Todas',fmtDate(t.prazo),t.valor+' pts',pg.ent+'/'+pg.total,t.status==='ativa'?'Ativa':'Concluída'];
   });
-  exportar(fmt,'Tarefas',['Título','Turma','Prazo','Valor','Status'],rows);
+  exportar(fmt,'Tarefas',['Título','Turma','Prazo','Valor','Entregas','Status'],rows);
+}
+function relEntregas(fmt){
+  const rows = [];
+  DB.tarefas.all().forEach(t=>{
+    const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
+    alunosDaTarefa(t).forEach(a=>{
+      const e = entregaDe(t,a.id);
+      const ok = !!(e && e.entregue);
+      const sit = ok ? 'Entregue' : t.status==='concluida' ? 'Não entregou' : isVencida(t.prazo) ? 'Atrasada' : 'Pendente';
+      rows.push([t.titulo,turma?turma.nome:'Todas',a.nome,sit,(ok && e.nota!=null)?e.nota.toFixed(1):'—']);
+    });
+  });
+  exportar(fmt,'Entregas',['Tarefa','Turma','Aluno','Situação','Nota'],rows);
 }
 function relPortfolio(fmt){
   const rows = DB.portfolios.all().map(p=>{
