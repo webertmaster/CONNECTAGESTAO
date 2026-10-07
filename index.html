@@ -74,7 +74,7 @@
     </div>
     <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
       <a data-page="dashboard" class="sidebar-link active flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
-        <i data-lucide="layout-dashboard" class="w-5 h-5"></i><span>Dashboard</span>
+        <i data-lucide="sun" class="w-5 h-5"></i><span>Hoje</span>
       </a>
       <a data-page="alunos" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer">
         <i data-lucide="users" class="w-5 h-5"></i><span>Alunos</span>
@@ -127,7 +127,7 @@
         <button id="btnMenu" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
           <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
-        <h2 id="pageTitle" class="text-lg lg:text-xl font-bold">Dashboard</h2>
+        <h2 id="pageTitle" class="text-lg lg:text-xl font-bold">Hoje</h2>
       </div>
       <div class="flex items-center gap-2">
         <button id="btnDark" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="Alternar tema">
@@ -502,7 +502,7 @@ const pages = {
   frequencia:renderFrequencia, tarefas:renderTarefas, portfolio:renderPortfolio
 };
 const titles = {
-  dashboard:'Dashboard',alunos:'Alunos',pagamentos:'Pagamentos',
+  dashboard:'Hoje',alunos:'Alunos',pagamentos:'Pagamentos',
   turmas:'Turmas',comunicados:'Comunicados',financeiro:'Financeiro',
   automacao:'Automação WhatsApp',relatorios:'Relatórios',notas:'Desempenho',
   frequencia:'Frequência',tarefas:'Tarefas',portfolio:'Portfólio de Provas e Trabalhos'
@@ -545,103 +545,200 @@ function toast(msg, type='success'){
   setTimeout(()=>t.classList.add('hidden'),3500);
 }
 
-/* ============ DASHBOARD ============ */
+/* ============ HOJE (tela inicial) ============ */
 let chart1;
+const DIAS_ABREV = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+/* Lê os dias da semana de um texto como "Seg/Qua 14h" */
+function parseDiasHorario(txt){
+  const n = String(txt||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const mapa = {dom:0,seg:1,ter:2,qua:3,qui:4,sex:5,sab:6};
+  const out = new Set();
+  const re = /\b(dom|seg|ter|qua|qui|sex|sab)/g;
+  let m;
+  while((m = re.exec(n))) out.add(mapa[m[1]]);
+  return Array.from(out).sort((a,b)=>a-b);
+}
+/* Se a turma tem dias definidos (editados), usa eles; senão lê do horário */
+function diasDaTurma(t){ return (t.dias && t.dias.length) ? t.dias : parseDiasHorario(t.horario); }
+/* true = tem aula hoje, false = não tem, null = sem dia definido */
+function turmaTemAulaHoje(t){
+  const d = diasDaTurma(t);
+  if(!d.length) return null;
+  return d.includes(new Date().getDay());
+}
+
+function parabenizar(aid){
+  const a = DB.alunos.all().find(x=>x.id===aid); if(!a) return;
+  const msg = `Olá, ${a.responsavel}! Hoje é aniversário de ${a.nome}. Desejamos um dia muito feliz, com muita saúde e alegria!`;
+  window.open(`https://wa.me/${foneWA(a.telefone)}?text=${encodeURIComponent(msg)}`,'_blank','noopener');
+}
+
 function renderDashboard(){
-  const alunos = DB.alunos.all();
-  const pag = DB.pagamentos.all();
-  const ativos = alunos.filter(a=>a.status==='ativo');
-  const inativos = alunos.filter(a=>a.status==='inativo');
   const hoje = new Date();
-  const mesAtual = hoje.getMonth(), anoAtual = hoje.getFullYear();
-  const vencProx = ativos
-    .map(a=>({a,s:statusVencimento(a,pag)}))
-    .filter(x=>!x.s.atrasado && x.s.dias>=0 && x.s.dias<=5);
+  const hojeS = hojeISO();
+  const alunos = DB.alunos.all();
+  const turmas = DB.turmas.all();
+  const ativos = alunos.filter(a=>a.status==='ativo');
+  const freqs = DB.frequencias.all();
+  const h = hoje.getHours();
+  const saud = h<12 ? 'Bom dia' : h<18 ? 'Boa tarde' : 'Boa noite';
+  let dataTxt = hoje.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  dataTxt = dataTxt.charAt(0).toUpperCase()+dataTxt.slice(1);
+  const pl = (n,s,p)=> n+' '+(n===1?s:p);
 
-  const todasNotas = DB.notas.all();
-  const mediaGeral = todasNotas.length ? todasNotas.reduce((s,n)=>s+n.nota,0)/todasNotas.length : 0;
+  const cBrand = 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 hover:bg-brand-200';
+  const cZap = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200';
+  const btn = (cor,onclick,icone,txt)=>`<button onclick="${onclick}" class="px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap ${cor}"><i data-lucide="${icone}" class="w-3.5 h-3.5"></i> ${txt}</button>`;
+  const linha = (texto,sub,acao)=>`<div class="flex items-center gap-3 py-2.5 border-t border-slate-200 dark:border-slate-700">
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate">${texto}</p>${sub?`<p class="text-xs text-slate-500">${sub}</p>`:''}</div>${acao||''}</div>`;
+  const vazio = msg=>`<p class="text-sm text-slate-500 py-2.5 border-t border-slate-200 dark:border-slate-700">${msg}</p>`;
+  const badge = (txt,tipo)=>{
+    const c = tipo==='ok' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+      : tipo==='no' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+    return `<span class="badge ${c} whitespace-nowrap">${txt}</span>`;
+  };
+  const secao = (num,titulo,bdg,corpo)=>`<div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="w-7 h-7 rounded-full gradient-brand text-white text-sm font-bold flex items-center justify-center flex-shrink-0">${num}</span>
+        <h3 class="font-bold flex-1">${titulo}</h3>${bdg||''}
+      </div>${corpo}</div>`;
+
+  /* Sistema vazio: mostra só os primeiros passos */
+  if(!turmas.length || !ativos.length){
+    const passo = (feito,txt,acao)=>`<div class="flex items-center gap-3 p-3 rounded-xl ${feito?'bg-emerald-50 dark:bg-emerald-900/20':'bg-slate-50 dark:bg-slate-700/40'}">
+      <i data-lucide="${feito?'check-circle':'circle'}" class="w-5 h-5 ${feito?'text-emerald-600':'text-slate-400'}"></i>
+      <span class="flex-1 text-sm font-semibold">${txt}</span>${feito?'':acao}</div>`;
+    document.getElementById('content').innerHTML = `
+      <div class="mb-5"><h3 class="text-2xl font-bold">${saud}!</h3><p class="text-sm text-slate-500">${dataTxt}</p></div>
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700 max-w-2xl">
+        <h3 class="font-bold mb-1">Primeiros passos</h3>
+        <p class="text-sm text-slate-500 mb-4">Faça isto para o sistema começar a te mostrar o que fazer a cada dia.</p>
+        <div class="space-y-2">
+          ${passo(turmas.length>0,'1. Cadastrar uma turma',btn(cBrand,'formTurma()','plus','Cadastrar'))}
+          ${passo(ativos.length>0,'2. Cadastrar um aluno',btn(cBrand,'formAluno()','user-plus','Cadastrar'))}
+          ${passo(freqs.length>0,'3. Fazer a primeira chamada',btn(cBrand,'chamadaHoje()','list-checks','Fazer chamada'))}
+        </div>
+      </div>`;
+    return;
+  }
+
+  /* 1. Chamada de hoje */
+  const porTurma = turmas.map(t=>({t, als:ativos.filter(a=>a.turmaId===t.id), aula:turmaTemAulaHoje(t)}));
+  const hojeTurmas = porTurma.filter(x=>x.aula!==false && x.als.length);
+  const semAula = porTurma.filter(x=>x.aula===false);
+  let chamadaPend = 0;
+  const linhasCh = hojeTurmas.map(x=>{
+    const feitos = x.als.filter(a=>freqs.some(f=>f.alunoId===a.id && f.data===hojeS)).length;
+    const pend = x.als.length - feitos;
+    if(pend>0) chamadaPend++;
+    const sub = `${esc(x.t.horario)} • ${pl(x.als.length,'aluno','alunos')}${x.aula===null?' • sem dia definido':''}`;
+    return linha(esc(x.t.nome), sub, pend>0 ? btn(cBrand,`chamadaTurma('${x.t.id}')`,'list-checks','Fazer chamada') : badge('Chamada feita','ok'));
+  }).join('');
+  const bdgCh = chamadaPend ? badge(pl(chamadaPend,'pendente','pendentes'),'am')
+    : hojeTurmas.length ? badge('Tudo feito','ok') : badge('Sem aula hoje','ok');
+  const corpoCh = (linhasCh || vazio(turmas.length ? 'Nenhuma turma com aula hoje.' : 'Nenhuma turma cadastrada ainda.'))
+    + (semAula.length ? `<p class="text-xs text-slate-500 pt-2.5 border-t border-slate-200 dark:border-slate-700">Sem aula hoje: ${semAula.map(x=>esc(x.t.nome)).join(', ')}</p>` : '');
+
+  /* 2. Cobranças */
+  const mens = DB.mensalidades.all().filter(m=>!m.pagoEm)
+    .map(m=>({m, a:alunos.find(x=>x.id===m.alunoId), st:stMens(m)}))
+    .filter(x=>x.a && x.a.status==='ativo');
+  const atras = mens.filter(x=>x.st.tipo==='atrasado').sort((x,y)=>y.st.dias-x.st.dias);
+  const breve = mens.filter(x=>x.st.tipo==='aberto' && x.st.dias<=7).sort((x,y)=>x.st.dias-y.st.dias);
+  const listaC = [...atras,...breve];
+  const linhasCob = listaC.slice(0,5).map(({m,a,st})=>
+    linha(esc(a.nome), `${compCurta(m.competencia)} • ${fmtBRL(m.valor)} • ${st.texto.toLowerCase()}`,
+      btn(cZap,`abrirMsgWA('${m.id}')`,'message-circle', st.tipo==='atrasado'?'Cobrar':'Lembrar'))).join('');
+  const maisCob = listaC.length>5 ? `<div class="pt-2.5 border-t border-slate-200 dark:border-slate-700">${btn(cBrand,"go('financeiro')",'wallet',`Ver todas (${listaC.length}) no Financeiro`)}</div>` : '';
+  const bdgCob = atras.length ? badge(pl(atras.length,'atrasada','atrasadas'),'no')
+    : breve.length ? badge(pl(breve.length,'a vencer','a vencer'),'am') : badge('Em dia','ok');
+  const corpoCob = (linhasCob || vazio('Nenhuma cobrança atrasada ou vencendo nesta semana.')) + maisCob;
+
+  /* 3. Tarefas */
+  const tars = DB.tarefas.all().filter(t=>t.status==='ativa' && t.prazo)
+    .map(t=>({t, pg:progressoTarefa(t), dias:diasAte(parseDate(t.prazo))}))
+    .filter(x=>x.pg.total>0 && x.dias<=7)
+    .sort((x,y)=>x.dias-y.dias);
+  const venc = tars.filter(x=>x.dias<0);
+  const linhasT = tars.slice(0,4).map(({t,pg,dias})=>{
+    const quando = dias<0 ? 'venceu há '+pl(-dias,'dia','dias') : dias===0 ? 'vence hoje' : 'vence em '+pl(dias,'dia','dias');
+    return linha(esc(t.titulo), `${pg.ent} de ${pg.total} entregaram • ${quando}`, btn(cBrand,`abrirEntregas('${t.id}')`,'clipboard-check','Ver entregas'));
+  }).join('');
+  const bdgT = venc.length ? badge(pl(venc.length,'vencida','vencidas'),'no')
+    : tars.length ? badge(tars.length+' vence'+(tars.length===1?'':'m')+' em breve','am') : badge('Em dia','ok');
+  const corpoT = (linhasT || vazio('Nenhuma tarefa vencendo nos próximos 7 dias.'))
+    + (tars.length>4 ? `<div class="pt-2.5 border-t border-slate-200 dark:border-slate-700">${btn(cBrand,"go('tarefas')",'list-checks',`Ver todas (${tars.length})`)}</div>` : '');
+
+  /* 4. Atenção */
+  const itens = [];
+  ativos.forEach(a=>{
+    const b = parseDate(a.nascimento);
+    if(b){
+      let prox = new Date(hoje.getFullYear(),b.getMonth(),b.getDate());
+      if(prox < inicioHoje()) prox = new Date(hoje.getFullYear()+1,b.getMonth(),b.getDate());
+      const d = diasAte(prox);
+      if(d<=7){
+        const idade = prox.getFullYear()-b.getFullYear();
+        if(d===0) itens.push({ord:0, html:linha(`${esc(a.nome)} faz aniversário hoje`, `${idade} anos`, btn(cBrand,`parabenizar('${a.id}')`,'gift','Parabenizar'))});
+        else itens.push({ord:3, html:linha(`${esc(a.nome)} faz aniversário ${d===1?'amanhã':'em '+fmtCurta(prox)}`, `${idade} anos`, '')});
+      }
+    }
+    const fr = calcularFrequencia(a.id);
+    if(fr.total>=3 && fr.percentual<75)
+      itens.push({ord:1, html:linha(`${esc(a.nome)} está com frequência de ${Math.round(fr.percentual)}%`, pl(fr.faltas,'falta','faltas'), btn(cBrand,`verAluno('${a.id}')`,'user','Ver aluno'))});
+    const ns = DB.notas.all().filter(n=>n.alunoId===a.id);
+    if(ns.length>=2){
+      const med = ns.reduce((s,n)=>s+(+n.nota||0)/(+n.notaMax||10)*10,0)/ns.length;
+      if(med<6) itens.push({ord:2, html:linha(`${esc(a.nome)} está com média ${med.toFixed(1).replace('.',',')}`, 'Abaixo de 6', btn(cBrand,`verAluno('${a.id}')`,'user','Ver aluno'))});
+    }
+  });
+  itens.sort((x,y)=>x.ord-y.ord);
+  const corpoA = (itens.slice(0,6).map(x=>x.html).join('') || vazio('Nenhum aviso hoje.'))
+    + (itens.length>6 ? vazio(`e mais ${itens.length-6} aviso(s).`) : '');
+  const bdgA = itens.length ? badge(pl(itens.length,'aviso','avisos'),'am') : badge('Tudo certo','ok');
+
+  const total = chamadaPend + listaC.length + tars.length + itens.filter(x=>x.ord<3).length;
+
+  /* Resumo */
+  const notas = DB.notas.all();
+  const mediaGeral = notas.length ? notas.reduce((s,n)=>s+n.nota,0)/notas.length : 0;
   const freqMedia = ativos.length ? ativos.reduce((s,a)=>s+calcularFrequencia(a.id).percentual,0)/ativos.length : 0;
-  const tarefasAtivas = DB.tarefas.all().filter(t=>t.status==='ativa');
-  const tarefasVencidas = tarefasAtivas.filter(t=>isVencida(t.prazo));
-  const baixaFreq = ativos.filter(a=>calcularFrequencia(a.id).percentual<75);
+  const pag = DB.pagamentos.all();
+  const mini = (rot,val)=>`<div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700"><p class="text-xs text-slate-500">${rot}</p><p class="text-lg font-bold">${val}</p></div>`;
 
-  const html = `
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      ${statCard('Total de Alunos', alunos.length, 'users', 'gradient-brand', 'text-white')}
-      ${statCard('Ativos', ativos.length, 'user-check', 'gradient-mint', 'text-white')}
-      ${statCard('Inativos', inativos.length, 'user-x', 'gradient-peach', 'text-white')}
-      ${statCard('Venc. próximos', vencProx.length, 'clock', 'gradient-sun', 'text-white')}
+  document.getElementById('content').innerHTML = `
+    <div class="mb-5">
+      <h3 class="text-2xl font-bold">${saud}!</h3>
+      <p class="text-sm text-slate-500">${dataTxt} • ${total ? `<b>${pl(total,'coisa','coisas')} para ver hoje</b>` : '<b class="text-emerald-600">Tudo em dia por hoje.</b>'}</p>
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      ${statCard('Média Geral', mediaGeral.toFixed(1), 'target', 'gradient-lav', 'text-white')}
-      ${statCard('Frequência Média', freqMedia.toFixed(0)+'%', 'calendar-check', 'gradient-mint', 'text-white')}
-      ${statCard('Tarefas Ativas', tarefasAtivas.length, 'list-checks', 'gradient-brand', 'text-white')}
-      ${statCard('Tarefas Vencidas', tarefasVencidas.length, 'alert-circle', 'gradient-peach', 'text-white')}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      ${secao(1,'Chamada de hoje',bdgCh,corpoCh)}
+      ${secao(2,'Cobranças',bdgCob,corpoCob)}
+      ${secao(3,'Tarefas',bdgT,corpoT)}
+      ${secao(4,'Atenção',bdgA,corpoA)}
     </div>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-      <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-bold">Pagamentos dos últimos 6 meses</h3>
-        </div>
-        <canvas id="chart1" height="110"></canvas>
-      </div>
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">⚠️ Vencimentos próximos</h3>
-        <div class="space-y-3">
-          ${vencProx.map(({a,s})=>`<div class="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-            <div>
-              <p class="font-semibold text-sm">${esc(a.nome)}</p>
-              <p class="text-xs text-slate-500">Resp.: ${esc(a.responsavel)} • ${fmtBRL(a.valor)}</p>
-            </div>
-            <span class="badge bg-amber-200 text-amber-900">${s.dias===0?'Hoje':fmtCurta(s.venc)}</span>
-          </div>`).join('') || '<p class="text-sm text-slate-500">Nenhum vencimento próximo.</p>'}
-        </div>
-      </div>
+    <p class="text-sm font-semibold text-slate-500 mb-2">Resumo</p>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      ${mini('Alunos ativos',ativos.length)}
+      ${mini('Média geral',mediaGeral?mediaGeral.toFixed(1).replace('.',','):'—')}
+      ${mini('Frequência média',freqMedia.toFixed(0)+'%')}
+      ${mini('Recebido no mês',fmtBRL(receitaMes(pag,hoje)))}
     </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">📋 Tarefas pendentes</h3>
-        <div class="space-y-2">
-          ${tarefasAtivas.slice(0,5).map(t=>{
-            const turma = DB.turmas.all().find(x=>x.id===t.turmaId);
-            const vencida = isVencida(t.prazo);
-            return `<div class="flex items-center justify-between p-3 rounded-xl ${vencida?'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800':'bg-slate-50 dark:bg-slate-700/40'}">
-              <div>
-                <p class="font-semibold text-sm">${esc(t.titulo)}</p>
-                <p class="text-xs text-slate-500">${turma?esc(turma.nome):''} • Prazo: ${fmtDate(t.prazo)}</p>
-              </div>
-              ${vencida?'<span class="badge bg-red-200 text-red-900">Vencida</span>':'<span class="badge bg-brand-100 text-brand-700">Ativa</span>'}
-            </div>`;
-          }).join('') || '<p class="text-sm text-slate-500">Nenhuma tarefa ativa.</p>'}
-        </div>
-      </div>
-      <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
-        <h3 class="font-bold mb-4">⚠️ Baixa frequência</h3>
-        <div class="space-y-2">
-          ${baixaFreq.map(a=>{
-            const freq = calcularFrequencia(a.id);
-            return `<div class="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <div>
-                <p class="font-semibold text-sm">${esc(a.nome)}</p>
-                <p class="text-xs text-slate-500">${freq.faltas} faltas • ${freq.justificadas} justificadas</p>
-              </div>
-              <span class="badge bg-red-200 text-red-900">${freq.percentual.toFixed(0)}%</span>
-            </div>`;
-          }).join('') || '<p class="text-sm text-slate-500">Todos com frequência adequada.</p>'}
-        </div>
-      </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+      <h3 class="font-bold mb-4">Pagamentos dos últimos 6 meses</h3>
+      <canvas id="chart1" height="90"></canvas>
     </div>
   `;
-  document.getElementById('content').innerHTML = html;
 
   const ctx = document.getElementById('chart1').getContext('2d');
   if(chart1) chart1.destroy();
-  const labels=[], data=[];
+  const labels = [], data = [];
   for(let i=5;i>=0;i--){
-    const d = new Date(anoAtual, mesAtual-i, 1);
+    const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
     labels.push(d.toLocaleDateString('pt-BR',{month:'short'}));
-    const total = pag.filter(p=>{const x=new Date(p.data);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear()}).reduce((s,p)=>s+p.valor,0);
-    data.push(total);
+    data.push(pag.filter(p=>{const x=new Date(p.data);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear()}).reduce((s,p)=>s+p.valor,0));
   }
   chart1 = new Chart(ctx,{
     type:'bar',
@@ -649,6 +746,7 @@ function renderDashboard(){
     options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}
   });
 }
+
 function statCard(label,val,icon,grad,text){
   return `<div class="card-hover ${grad} ${text} rounded-2xl p-5 shadow-sm">
     <div class="flex items-center justify-between mb-3"><span class="text-sm opacity-90">${label}</span><i data-lucide="${icon}" class="w-5 h-5"></i></div>
@@ -1602,7 +1700,7 @@ function formFrequencia(){
   });
 }
 
-function chamadaTurma(){
+function chamadaTurma(turmaIdPre){
   const turmas = DB.turmas.all();
   openModal('Chamada por turma', `
     <form id="formCT" class="space-y-4">
@@ -1663,8 +1761,9 @@ function chamadaTurma(){
       count++;
     });
     DB.frequencias.save(lista);
-    closeModal(); toast(`Chamada registrada para ${count} alunos!`); renderFrequencia();
+    closeModal(); toast(`Chamada registrada para ${count} alunos!`); refreshPagina();
   });
+  if(turmaIdPre){ const st = document.getElementById('ctTurma'); st.value = turmaIdPre; st.dispatchEvent(new Event('change')); }
 }
 
 function chamadaHoje(){
@@ -1711,7 +1810,7 @@ function chamadaHoje(){
       count++;
     });
     DB.frequencias.save(lista);
-    closeModal(); toast(`Chamada de hoje registrada para ${count} alunos!`); renderFrequencia();
+    closeModal(); toast(`Chamada de hoje registrada para ${count} alunos!`); refreshPagina();
   });
 }
 
@@ -2192,6 +2291,7 @@ function renderTurmas(){
 }
 function formTurma(editId){
   const t = editId ? DB.turmas.all().find(x=>x.id===editId) : {nome:'',professor:'',horario:'',maxAlunos:10,disciplinas:[]};
+  const diasSel = (t.dias && t.dias.length) ? t.dias : parseDiasHorario(t.horario);
   openModal(editId?'Editar turma':'Nova turma',`
     <form id="formT" class="space-y-4">
       <div><label class="text-xs font-semibold">Nome da turma</label><input name="nome" required value="${esc(t.nome)}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
@@ -2199,6 +2299,11 @@ function formTurma(editId){
         <div><label class="text-xs font-semibold">Professor</label><input name="professor" required value="${esc(t.professor)}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
         <div><label class="text-xs font-semibold">Horário</label><input name="horario" required value="${esc(t.horario)}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
       </div>
+      <div><label class="text-xs font-semibold">Dias da semana (usado na tela Hoje)</label>
+        <div class="flex flex-wrap gap-2 mt-1">
+          ${DIAS_ABREV.map((d,i)=>`<label class="cursor-pointer"><input type="checkbox" class="hidden peer chip-dia" value="${i}" ${diasSel.includes(i)?'checked':''}/><div class="px-3 py-2 rounded-xl border-2 border-slate-200 dark:border-slate-700 peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-900/20 text-sm font-semibold">${d}</div></label>`).join('')}
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Preenchido sozinho a partir do horário. Você pode ajustar à mão.</p></div>
       <div><label class="text-xs font-semibold">Disciplinas (separadas por vírgula)</label><input name="disciplinas" value="${esc((t.disciplinas||[]).join(', '))}" placeholder="Matemática, Português" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
       <div><label class="text-xs font-semibold">Máximo de alunos</label><input type="number" name="maxAlunos" required value="${t.maxAlunos||10}" class="w-full mt-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/></div>
       <div class="flex justify-end gap-2">
@@ -2207,9 +2312,18 @@ function formTurma(editId){
       </div>
     </form>
   `);
+  const chips = Array.from(document.querySelectorAll('#formT .chip-dia'));
+  let tocou = false;
+  chips.forEach(c=>c.addEventListener('change',()=>{ tocou = true; }));
+  document.querySelector('#formT [name=horario]').addEventListener('input',ev=>{
+    if(tocou) return;
+    const ds = parseDiasHorario(ev.target.value);
+    chips.forEach(c=>{ c.checked = ds.includes(parseInt(c.value)); });
+  });
   document.getElementById('formT').addEventListener('submit',e=>{
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
+    data.dias = chips.filter(c=>c.checked).map(c=>parseInt(c.value));
     data.maxAlunos = parseInt(data.maxAlunos)||10;
     data.disciplinas = data.disciplinas.split(',').map(d=>d.trim()).filter(Boolean);
     const lista = DB.turmas.all();
@@ -2701,7 +2815,7 @@ function registrarContato(mid,tipo){
   m.ultimoContato = new Date().toISOString();
   DB.mensalidades.save(ms);
   toast('Mensagem aberta no WhatsApp');
-  if(paginaAtual==='financeiro'){ renderFinanceiro(); lucide.createIcons(); }
+  if(paginaAtual==='financeiro' || paginaAtual==='dashboard') refreshPagina();
 }
 
 /* ============ AUTOMAÇÃO ============ */
